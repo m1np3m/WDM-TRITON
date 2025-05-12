@@ -136,7 +136,6 @@ python-docx==1.1.2
 python-dotenv==1.1.0
 python-pptx==1.0.2
 pytz==2025.2
-pywin32==310
 PyYAML==6.0.2
 referencing==0.36.2
 regex==2024.11.6
@@ -185,3 +184,4 @@ XlsxWriter==3.2.3
 yarl==1.20.0
 zipp==3.21.0
 zstandard==0.23.0
+pymilvus

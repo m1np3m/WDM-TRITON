@@ -3,6 +3,7 @@ import os
 import numpy as np
 from src.datasets.dataset import Dataset
 from src.db import chroma_client
+from src.db.milvus import milvus_colbert_retriever
 
 class M3DocVQA(Dataset):
     def __init__(self, image_path: str, embedding_path: str):
@@ -11,7 +12,7 @@ class M3DocVQA(Dataset):
     def load_data(self):
         self.data = []
 
-    def add_data_to_db(self, collection_name: str, batch_size: int = 100):
+    def add_data_to_chroma_db(self, collection_name: str, batch_size: int = 100):
         image_files = glob.glob(os.path.join(self.image_path, "*"))
         
         # Process files in batches
@@ -21,8 +22,9 @@ class M3DocVQA(Dataset):
             
             img_num = 0
             for image_file in batch_files:
+                print(image_file)
                 image_name = os.path.basename(image_file)
-                embedding_file = os.path.join(self.embedding_path, image_name)
+                embedding_file = os.path.join(self.embedding_path, image_name + ".npy")
 
                 embedding = np.load(embedding_file)
                 embedding = np.squeeze(embedding, axis=0)
@@ -36,3 +38,22 @@ class M3DocVQA(Dataset):
 
     def get_data(self):
         return self.data
+
+
+    def add_data_to_milvus_db(self, collection_name: str):
+        image_files = glob.glob(os.path.join(self.image_path, "*"))
+
+        for i, image_file in enumerate(image_files):
+            image_name = os.path.basename(image_file)
+            embedding_file = os.path.join(self.embedding_path, image_name + ".npy")
+
+            embeddings = np.load(embedding_file)
+            embeddings = np.squeeze(embeddings, axis=0)
+
+            data = {
+                "doc_id": i,
+                "colbert_vecs": embeddings,
+                "filepath": image_file
+            }
+
+            milvus_colbert_retriever.insert(data)
