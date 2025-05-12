@@ -18,10 +18,18 @@ pip install -r requirements.txt
 python create_chroma_db.py
 ```
 
+### Create Milvus DB
+```bash
+python create_chroma_db.py
+```
+
 ## Run Demo
 - Milvus DB
 ```bash
 python demo.py --question_embedding_folder "m3docvqa/question_embeddings" --qa_file "m3docvqa/multimodalqa/MMQA_dev.jsonl" --num_question 1 --image_folder "m3docvqa/images_dev" --db "milvus" --output_folder ""
 ```
-
+- Chroma DB
+```bash
+python demo.py --question_embedding_folder "m3docvqa/question_embeddings" --qa_file "m3docvqa/multimodalqa/MMQA_dev.jsonl" --num_question 1 --image_folder "m3docvqa/images_dev" --db "chroma" --output_folder ""
+```
 
