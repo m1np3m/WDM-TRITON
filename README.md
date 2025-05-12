@@ -19,8 +19,9 @@ python create_chroma_db.py
 ```
 
 ## Run Demo
+- Milvus DB
 ```bash
-python demo.py --question_embedding_folder m3docvqa/question_embeddings --qa_file m3docvqa/m3docvqa_dev.jsonl --num_question 10 --image_folder m3docvqa/images_dev --output_folder m3docvqa/output
+python demo.py --question_embedding_folder "m3docvqa/question_embeddings" --qa_file "m3docvqa/multimodalqa/MMQA_dev.jsonl" --num_question 1 --image_folder "m3docvqa/images_dev" --db "milvus" --output_folder ""
 ```
 
 

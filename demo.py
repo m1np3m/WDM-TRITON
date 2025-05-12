@@ -3,6 +3,7 @@ import os
 import numpy as np
 import random
 from src.db import chroma_client
+from src.db.milvus import milvus_colbert_retriever
 from src.services.llm import LLMService
 import glob
 import jsonlines
@@ -23,6 +24,7 @@ def parse_args():
     parser.add_argument("--num_question", type=int, required=True)
     parser.add_argument("--image_folder", type=str, required=True)
     parser.add_argument("--output_folder", type=str, required=True)
+    parser.add_argument("--db", type=str, required=True)
     return parser.parse_args()
 
 def mapping_question(question_embedding_file: str, qa_file: str):
@@ -31,6 +33,38 @@ def mapping_question(question_embedding_file: str, qa_file: str):
         for qa in reader:
             if qa["qid"] == qid:
                 return qa["question"], qa["answers"], qa["supporting_context"]
+
+def use_chroma_db(question_embedding_file: str, topk: int):
+    question_embedding = np.load(question_embedding_file)
+    question_embedding = np.squeeze(question_embedding, axis=0)
+    question_embedding = np.mean(question_embedding, axis=0)
+    question_embedding = question_embedding.tolist()
+
+    collection = chroma_client.get_collection(COLLECTION_NAME)
+    results = collection.query(
+        query_embeddings=question_embedding,
+        n_results=topk,
+    )
+    image_paths = [result["image_name"] for result in results["metadatas"][0]]
+    return image_paths
+
+def use_milvus_db(question_embedding_file: str, topk: int):
+    question_embedding = np.load(question_embedding_file)
+    question_embedding = np.squeeze(question_embedding, axis=0)
+
+    results = milvus_colbert_retriever.search(question_embedding, topk)
+
+    image_paths = []
+    for result in results:
+        doc_id = result[1]
+        res = milvus_colbert_retriever.client.query(    
+            collection_name="m3docvqa_500",
+            filter=f"doc_id == {doc_id}",
+            output_fields=["doc"]
+        )
+        image_paths.append(os.path.basename(res[0]["doc"]))
+
+    return image_paths
 
 def main():
     args = parse_args()
@@ -62,13 +96,11 @@ def main():
                 question_embedding = np.mean(question_embedding, axis=0)
                 question_embedding = question_embedding.tolist()
 
-                collection = chroma_client.get_collection(COLLECTION_NAME)
-                results = collection.query(
-                    query_embeddings=question_embedding,
-                    n_results=5,
-                )
-
-                related_image_names = [result["image_name"] for result in results["metadatas"][0]]
+                if args.db == "chroma":
+                    related_image_names = use_chroma_db(question_embedding_file, 5)
+                elif args.db == "milvus":
+                    related_image_names = use_milvus_db(question_embedding_file, 5)
+                
                 related_image_paths = [os.path.join(image_folder, image_name) for image_name in related_image_names]
 
                 llm_answer = llm_service.complete(
