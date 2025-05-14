@@ -1,0 +1,5 @@
+m3docvqa/
+chroma_db/
+.deepeval/
+.env
+milvus_db/
