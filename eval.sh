@@ -1,0 +1,1 @@
+python eval.py --question_embedding_folder "m3docvqa/question_embeddings" --qa_file "m3docvqa/multimodalqa/MMQA_dev.jsonl" --num_question 1 --image_folder "m3docvqa/images_dev" --db "milvus" --topk 5 --output_file "eval_results.jsonl"

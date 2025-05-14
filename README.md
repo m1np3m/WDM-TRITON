@@ -18,10 +18,32 @@ pip install -r requirements.txt
 python create_chroma_db.py
 ```
 
-## Run Demo
+### Create Milvus DB
+```bash
+python create_milvus_db.py
+```
+
+## Evaluation
+- Answer Relevancy
+- Faithfulness
+- Contextual Precision
+- Contextual Recall
+- Contextual Relevancy
+
+```bash
+python eval.py --question_embedding_folder "m3docvqa/question_embeddings" --qa_file "m3docvqa/multimodalqa/MMQA_dev.jsonl" --num_question 5 --image_folder "m3docvqa/images_dev" --db "milvus" --topk 5 --output_file "eval_results.jsonl"
+```
+## Demo
 - Milvus DB
 ```bash
-python demo.py --question_embedding_folder "m3docvqa/question_embeddings" --qa_file "m3docvqa/multimodalqa/MMQA_dev.jsonl" --num_question 1 --image_folder "m3docvqa/images_dev" --db "milvus" --output_folder ""
+python demo.py --question_embedding_folder "m3docvqa/question_embeddings" --qa_file "m3docvqa/multimodalqa/MMQA_dev.jsonl" --num_question 5 --image_folder "m3docvqa/images_dev" --db "milvus" --topk 5 --output_file "demo_results.jsonl"
 ```
+
+- Chroma DB
+```bash
+python demo.py --question_embedding_folder "m3docvqa/question_embeddings" --qa_file "m3docvqa/multimodalqa/MMQA_dev.jsonl" --num_question 5 --image_folder "m3docvqa/images_dev" --db "chroma" --topk 5 --output_file "demo_results.jsonl"
+```
+
+
 
 

@@ -23,8 +23,9 @@ def parse_args():
     parser.add_argument("--qa_file", type=str, required=True)
     parser.add_argument("--num_question", type=int, required=True)
     parser.add_argument("--image_folder", type=str, required=True)
-    parser.add_argument("--output_folder", type=str, required=True)
+    parser.add_argument("--output_file", type=str, required=True)
     parser.add_argument("--db", type=str, required=True)
+    parser.add_argument("--topk", type=int, required=True, default=5)
     return parser.parse_args()
 
 def mapping_question(question_embedding_file: str, qa_file: str):
@@ -70,8 +71,8 @@ def main():
     args = parse_args()
     question_embedding_folder = args.question_embedding_folder
     image_folder = args.image_folder
-    output_folder = args.output_folder
-
+    output_file = args.output_file
+    topk = args.topk
     llm_service = LLMService()
 
     image_names = os.listdir(image_folder)
@@ -97,9 +98,9 @@ def main():
                 question_embedding = question_embedding.tolist()
 
                 if args.db == "chroma":
-                    related_image_names = use_chroma_db(question_embedding_file, 5)
+                    related_image_names = use_chroma_db(question_embedding_file, topk=topk)
                 elif args.db == "milvus":
-                    related_image_names = use_milvus_db(question_embedding_file, 5)
+                    related_image_names = use_milvus_db(question_embedding_file, topk=topk)
                 
                 related_image_paths = [os.path.join(image_folder, image_name) for image_name in related_image_names]
 
@@ -121,10 +122,9 @@ def main():
                 break
         i += 1
         
-    with open(os.path.join(output_folder, "output.jsonl"), "w") as f:
+    with open(output_file, "w") as f:
         for data in output_data:
             jsonlines.Writer(f).write(data)
-
 
 if __name__ == "__main__":
     main()
