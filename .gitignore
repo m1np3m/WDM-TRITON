@@ -1,0 +1,10 @@
+m3docvqa/
+chroma_db/
+.deepeval/
+.env
+milvus_db/
+markdown_pdf/
+doctag_pdf/
+out/
+parsing/
+
