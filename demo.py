@@ -3,29 +3,38 @@ import os
 import numpy as np
 import random
 from src.db import chroma_client
-from src.db.milvus import milvus_colbert_retriever
+from src.db.milvus import MilvusColbertRetriever, MilvusBgeM3Retriever
 from src.services.llm import LLMService
+from src.models.embedding.bge_m3 import BgeM3MilvusEmbedding
 import glob
 import jsonlines
+from pymilvus import MilvusClient
 
-COLLECTION_NAME = "m3docvqa_500"
+COPALI_COLLECTION_NAME = "m3docvqa_500"
+TEXT_COLLECTION_NAME = "m3docvqa_text"
 
-RAG_PROMPT = """
+IMAGE_RAG_PROMPT = """
 You are a helpful assistant that can answer questions about the image.
 If the question is not related to the image, please answer "I don't know".
 """
 
+TEXT_RAG_PROMPT = """
+You are a helpful assistant that can answer questions about the text.
+If the question is not related to the text, please answer "I don't know".
+"""
+
 providers = [{"name": "gemini-image", "model": "gemini-1.5-pro", "temperature": 0.9, "retry": 3}]
+milvus_client = MilvusClient(uri="milvus_db/milvus.db")
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--question_embedding_folder", type=str, required=True)
-    parser.add_argument("--qa_file", type=str, required=True)
-    parser.add_argument("--num_question", type=int, required=True)
-    parser.add_argument("--image_folder", type=str, required=True)
-    parser.add_argument("--output_file", type=str, required=True)
-    parser.add_argument("--db", type=str, required=True)
-    parser.add_argument("--topk", type=int, required=True, default=5)
+    parser.add_argument("--question_embedding_folder", type=str, required=False, default='m3docvqa/question_embeddings')
+    parser.add_argument("--qa_file", type=str, required=False, default='m3docvqa/multimodalqa/MMQA_dev.jsonl')
+    parser.add_argument("--num_question", type=int, required=False, default=1)
+    parser.add_argument("--image_folder", type=str, required=False, default='m3docvqa/images_dev')
+    parser.add_argument("--output_file", type=str, required=False, default='demo_results.jsonl')
+    parser.add_argument("--db", type=str, required=False, default='bge_m3_milvus')
+    parser.add_argument("--topk", type=int, required=False, default=5)
     return parser.parse_args()
 
 def mapping_question(question_embedding_file: str, qa_file: str):
@@ -41,7 +50,7 @@ def use_chroma_db(question_embedding_file: str, topk: int):
     question_embedding = np.mean(question_embedding, axis=0)
     question_embedding = question_embedding.tolist()
 
-    collection = chroma_client.get_collection(COLLECTION_NAME)
+    collection = chroma_client.get_collection(COPALI_COLLECTION_NAME)
     results = collection.query(
         query_embeddings=question_embedding,
         n_results=topk,
@@ -49,10 +58,11 @@ def use_chroma_db(question_embedding_file: str, topk: int):
     image_paths = [result["image_name"] for result in results["metadatas"][0]]
     return image_paths
 
-def use_milvus_db(question_embedding_file: str, topk: int):
+def use_copali_milvus_db(question_embedding_file: str, topk: int):
     question_embedding = np.load(question_embedding_file)
     question_embedding = np.squeeze(question_embedding, axis=0)
 
+    milvus_colbert_retriever = MilvusColbertRetriever(milvus_client, COPALI_COLLECTION_NAME)
     results = milvus_colbert_retriever.search(question_embedding, topk)
 
     image_paths = []
@@ -66,6 +76,21 @@ def use_milvus_db(question_embedding_file: str, topk: int):
         image_paths.append(os.path.basename(res[0]["doc"]))
 
     return image_paths
+
+def use_bge_m3_milvus_db(question: str, topk: int):
+    bge_m3_embedding = BgeM3MilvusEmbedding()
+    bge_m3_retriever = MilvusBgeM3Retriever(milvus_client, TEXT_COLLECTION_NAME)
+    question_embedding = bge_m3_embedding.encode([question])
+    dense_vector = question_embedding["dense"][0]
+
+    sparse_vector = question_embedding["sparse"][0]
+    sparse_vector = {c: v for c, v in zip(sparse_vector.col, sparse_vector.data)}
+
+    dense_results = bge_m3_retriever.dense_search(dense_vector, topk)
+    # sparse_results = bge_m3_retriever.sparse_search(sparse_vector, topk)
+
+    text_results = [text_result["text"] for text_result in dense_results]
+    return text_results
 
 def main():
     args = parse_args()
@@ -90,32 +115,44 @@ def main():
         question_embedding_file = question_embedding_files[i]
         question, answers, support_context = mapping_question(question_embedding_file, args.qa_file)
         
+        related_image_paths = []
+        related_text = []
+
         for sp in support_context:
             if sp["doc_id"] in doc_ids:
-                question_embedding = np.load(question_embedding_file)
-                question_embedding = np.squeeze(question_embedding, axis=0)
-                question_embedding = np.mean(question_embedding, axis=0)
-                question_embedding = question_embedding.tolist()
 
                 if args.db == "chroma":
                     related_image_names = use_chroma_db(question_embedding_file, topk=topk)
-                elif args.db == "milvus":
-                    related_image_names = use_milvus_db(question_embedding_file, topk=topk)
-                
-                related_image_paths = [os.path.join(image_folder, image_name) for image_name in related_image_names]
-
-                llm_answer = llm_service.complete(
-                    system_prompt=RAG_PROMPT,
-                    user_prompt=question,
-                    image_paths=related_image_paths,
-                    providers=providers,
-                )
+                    related_image_paths = [os.path.join(image_folder, image_name) for image_name in related_image_names]
+                    llm_answer = llm_service.complete(
+                        system_prompt=IMAGE_RAG_PROMPT,
+                        user_prompt=question,
+                        image_paths=related_image_paths,
+                        providers=providers,
+                    )
+                elif args.db == "copali_milvus":
+                    related_image_names = use_copali_milvus_db(question_embedding_file, topk=topk)
+                    related_image_paths = [os.path.join(image_folder, image_name) for image_name in related_image_names]
+                    llm_answer = llm_service.complete(
+                        system_prompt=IMAGE_RAG_PROMPT,
+                        user_prompt=question,
+                        image_paths=related_image_paths,
+                        providers=providers,
+                    )
+                elif args.db == "bge_m3_milvus":
+                    related_text = use_bge_m3_milvus_db(question, topk=topk)
+                    llm_answer = llm_service.complete(
+                        system_prompt=TEXT_RAG_PROMPT,
+                        user_prompt=f"Question: {question}\nRelated text: {related_text}",
+                        providers=providers,
+                    )
 
                 output_data.append({
                     "question": question,
                     "answers": answers,
                     "llm_answer": llm_answer,
                     "related_image_paths": related_image_paths,
+                    "related_text": related_text,
                 })
 
                 sample_idx += 1

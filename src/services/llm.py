@@ -53,21 +53,21 @@ class LLMService:
                     if is_success:
                         return response
 
-            #     if provider["name"] == "gemini":
-            #         is_success, response, error = self.__call_gemini(
-            #             system_prompt=system_prompt,
-            #             user_prompt=user_prompt,
-            #             model=provider["model"],
-            #             retry=provider["retry"],
-            #             json_output=json_output,
-            #             temperature=provider.get("temperature", 0.0),
-            #             limit_length=limit_length,
-            #             image_url=image_url
-            #         )
-            #         if is_success:
-            #             return response
-            # if not is_success:
-            #     raise Exception(error)
+                if provider["name"] == "gemini":
+                    is_success, response, error = self.__call_gemini(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        model=provider["model"],
+                        retry=provider["retry"],
+                        json_output=json_output,
+                        temperature=provider.get("temperature", 0.0),
+                        limit_length=limit_length,
+                        image_url=None
+                    )
+                    if is_success:
+                        return response
+            if not is_success:
+                raise Exception(error)
 
             return response
         except Exception as ex:
@@ -102,48 +102,46 @@ class LLMService:
             Tuple[bool, Optional[dict or str], Optional[str]]: Success flag, result, and error message.
         """
         try:
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
             self.show_log(message=f"__call_gemini", level="info")
             
-            generation_config = {
-                "temperature": temperature,
-                "max_output_tokens": 8192,
-            }
-            
-            if json_output:
-                generation_config["response_mime_type"] = "application/json"
-            
-            safety_settings = {
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            }
-            
-            model_llm = genai.GenerativeModel(
-                model_name=model,
-                generation_config=generation_config,
-                safety_settings=safety_settings,
+            generation_config = GenerateContentConfig(
                 system_instruction=system_prompt,
+                temperature=temperature,
+                max_output_tokens=8192,
+                top_p=0.95,
+                top_k=40,
+                response_mime_type="application/json" if json_output else "text/plain",
+                safety_settings=[
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE
+                    ),
+                    SafetySetting(
+                        category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=HarmBlockThreshold.BLOCK_NONE
+                    )
+                ]
             )
-            
-            message = [{'role': 'user', 'parts': [user_prompt]}]
+             
+            message = []
             
             if image_url:
-                message.append({'role': 'user', 'parts': [f"Image: {image_url}"]})
+                message.append(f"Image: {image_url}")
                 self.show_log(message=f"Image data added to the request: {image_url}", level="debug")
+            message.append(user_prompt)
 
-            responses = model_llm.generate_content(message, request_options={'timeout': 600})
-            full_response_text = ''
-            try:
-                for response in responses:
-                    if response.text:
-                        full_response_text += response.text
-            except AttributeError:
-                for response in responses:
-                    for part in response.parts:
-                        full_response_text += part.text
+            responses = client.models.generate_content(model=model, contents=message, config=generation_config)
+            full_response_text = responses.text
             
             if json_output:
                 try:
@@ -244,20 +242,19 @@ class LLMService:
                 import requests
                 import time
                 
-                def upload_to_gemini(image_path):
-                    # Upload file lên Gemini
-                    try:
-                        file = client.files.upload(file=image_path)
-                        self.show_log(message=f"Uploaded file as: {file.uri}", level="debug")
-                        return file
-                    finally:
-                        # Đợi một chút để đảm bảo file đã được upload hoàn tất
-                        time.sleep(1)
+                def upload_to_gemini(image_path, retries=3):
+                    for i in range(retries):
+                        # Upload file lên Gemini
+                        try:
+                            file = client.files.upload(file=image_path)
+                            self.show_log(message=f"Uploaded file as: {file.uri}", level="debug")
+                            time.sleep(1)
+                            return file
+                        except Exception as ex:
+                            self.show_log(message=f"Fail to upload file to gemini with ex: {ex}, retry: {i}", level="error")
                 
                 # Upload tất cả các file
-                files = []
-                for path in image_paths:
-                    files.append(upload_to_gemini(path))
+                files = [upload_to_gemini(path) for path in image_paths]
                 
                 # Bắt đầu chat session với các file đã upload
                 chat_session = client.chats.create(

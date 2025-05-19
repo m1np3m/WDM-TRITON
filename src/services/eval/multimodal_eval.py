@@ -19,11 +19,11 @@ class MultiModalEval(RAGEval):
                     for gt in ground_truth
                 ],
                 retrieval_context=[
-                    MLLMImage(url=context) if (context.endswith('.png') or context.endswith('.jpg')) else context
+                    MLLMImage(url=context) if (str(context).endswith('.png') or str(context).endswith('.jpg')) else context
                     for context in retrieval_context
                 ],
                 context=[
-                    MLLMImage(url=context) if (context.endswith('.png') or context.endswith('.jpg')) else context
+                    MLLMImage(url=context) if (str(context).endswith('.png') or str(context).endswith('.jpg')) else context
                     for context in retrieval_context
                 ]
             )

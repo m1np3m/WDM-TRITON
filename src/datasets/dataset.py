@@ -1,6 +1,6 @@
 class Dataset:
-    def __init__(self, image_path: str, embedding_path: str):
-        self.image_path = image_path
+    def __init__(self, data_path: str, embedding_path: str):
+        self.data_path = data_path
         self.embedding_path = embedding_path
 
     def load_data(self):
