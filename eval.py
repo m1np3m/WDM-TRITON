@@ -12,7 +12,7 @@ from pymilvus import MilvusClient
 from src.models.embedding.bge_m3 import BgeM3MilvusEmbedding
 from src.db.milvus import MilvusBgeM3Retriever
 
-COLLECTION_NAME = "m3docvqa_500"
+COLLECTION_NAME = "m3docvqa_copali"
 TEXT_COLLECTION_NAME = "m3docvqa_text"
 
 IMAGE_RAG_PROMPT = """
@@ -25,7 +25,7 @@ You are a helpful assistant that can answer questions about the text.
 If the question is not related to the text, please answer "I don't know".
 """
 
-providers = [{"name": "gemini-image", "model": "gemini-1.5-pro", "temperature": 0.9, "retry": 3}]
+providers = [{"name": "gemini-image", "model": "gemini-2.0-flash", "temperature": 0.9, "retry": 3}]
 
 milvus_client = MilvusClient(uri="milvus_db/milvus.db")
 
@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument("--qa_file", type=str, required=False, default="m3docvqa/multimodalqa/MMQA_dev.jsonl")
     parser.add_argument("--num_question", type=int, required=False, default=1)
     parser.add_argument("--image_folder", type=str, required=False, default="m3docvqa/images_dev")
-    parser.add_argument("--db", type=str, required=False, default="bge_m3_milvus")
+    parser.add_argument("--db", type=str, required=False, default="copali_milvus")
     parser.add_argument("--topk", type=int, required=False, default=5)
     parser.add_argument("--output_file", type=str, required=False, default="eval_results.jsonl")
     return parser.parse_args()
@@ -108,7 +108,7 @@ def main():
     doc_ids = list(set(doc_ids))
     print(f"Total number of documents: {len(doc_ids)}")
     question_embedding_files = glob.glob(os.path.join(question_embedding_folder, "*.npy"))
-    random.shuffle(question_embedding_files)
+    # random.shuffle(question_embedding_files)
 
     i = 0
     sample_idx = 0
@@ -116,6 +116,7 @@ def main():
     questions = []
     predictions = []
     ground_truths = []
+    answers = []
     retrieval_context = []
 
     while sample_idx < args.num_question and i < len(question_embedding_files):
@@ -134,7 +135,7 @@ def main():
                     llm_answer = llm_service.complete(
                         system_prompt=IMAGE_RAG_PROMPT,
                         user_prompt=question,
-                        image_paths=related_image_paths,
+                        file_paths=related_image_paths,
                         providers=providers,
                     )
                 elif args.db == "copali_milvus":
@@ -144,7 +145,7 @@ def main():
                     llm_answer = llm_service.complete(
                         system_prompt=IMAGE_RAG_PROMPT,
                         user_prompt=question,
-                        image_paths=related_image_paths,
+                        file_paths=related_image_paths,
                         providers=providers,
                     )
                 elif args.db == "bge_m3_milvus":
@@ -160,7 +161,7 @@ def main():
                 predictions.append([llm_answer])
                 ground_truths.append([answers[0]["answer"]])
                 retrieval_context.append(related_text + related_image_paths)
-
+                answers.append(answers)
                 sample_idx += 1
                 break
         i += 1
@@ -175,9 +176,11 @@ def main():
                 "question": questions[i],
                 "prediction": predictions[i],
                 "ground_truth": ground_truths[i],
+                "answers": answers[i],
                 "retrieval_context": retrieval_context[i],
                 "eval": results[i]
             }
             jsonlines.Writer(f).write(line)
+            
 if __name__ == "__main__":
     main()

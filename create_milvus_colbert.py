@@ -2,9 +2,11 @@ from src.datasets import M3DocVQA
 from src.db.milvus import MilvusColbertRetriever
 from pymilvus import MilvusClient
 
-MILVUS_COLLECTION_NAME = "m3docvqa_500"
+MILVUS_COLLECTION_NAME = "m3docvqa_copali"
+
 
 milvus_client = MilvusClient(uri="milvus_db/milvus.db")
+milvus_client.drop_collection(MILVUS_COLLECTION_NAME)
 milvus_colbert_retriever = MilvusColbertRetriever(milvus_client, MILVUS_COLLECTION_NAME)
 
 milvus_colbert_retriever.create_collection()

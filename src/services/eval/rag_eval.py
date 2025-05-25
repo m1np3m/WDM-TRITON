@@ -17,7 +17,7 @@ class RAGEval:
         self.retrieval_context = retrieval_context
 
         self.model = MultimodalGeminiModel(
-            model_name="gemini-1.5-pro",
+            model_name="gemini-2.5-flash-preview-05-20",
             api_key=os.getenv("GOOGLE_API_KEY"),
             temperature=0
         )
@@ -47,5 +47,8 @@ class RAGEval:
             })
         return results
 
+    def evaluate_retrieval(self):
+        pass
+    
     def make_test_case(self):
         pass

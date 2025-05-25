@@ -43,6 +43,9 @@ class LLMParser:
 
     def parse(self, output_path: str) -> str:
         pdf_paths = os.listdir(self.data_path)
+        pdf_paths = [pdf_path for pdf_path in pdf_paths if f"{os.path.basename(pdf_path)}.json" not in os.listdir(output_path)]
+        print(f"Found {len(pdf_paths)} pdfs to parse")
+
         for pdf_path in pdf_paths:
             for attempt in range(3):
                 parsing_results = self.llm_service.complete(

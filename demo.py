@@ -10,12 +10,12 @@ import glob
 import jsonlines
 from pymilvus import MilvusClient
 
-COPALI_COLLECTION_NAME = "m3docvqa_500"
+COPALI_COLLECTION_NAME = "m3docvqa_copali"
 TEXT_COLLECTION_NAME = "m3docvqa_text"
 
 IMAGE_RAG_PROMPT = """
-You are a helpful assistant that can answer questions about the image.
-If the question is not related to the image, please answer "I don't know".
+You are a helpful and intelligent assistant. Below is contextual information extracted from one or more images provided by the user. This may include OCR text, image captions, object descriptions, or metadata.
+Based on this image-derived context, answer the user's question as accurately and concisely as possible.
 """
 
 TEXT_RAG_PROMPT = """
@@ -23,7 +23,7 @@ You are a helpful assistant that can answer questions about the text.
 If the question is not related to the text, please answer "I don't know".
 """
 
-providers = [{"name": "gemini-image", "model": "gemini-1.5-pro", "temperature": 0.9, "retry": 3}]
+providers = [{"name": "gemini-image", "model": "gemini-2.0-flash", "temperature": 0.9, "retry": 3}]
 milvus_client = MilvusClient(uri="milvus_db/milvus.db")
 
 def parse_args():
@@ -33,7 +33,7 @@ def parse_args():
     parser.add_argument("--num_question", type=int, required=False, default=1)
     parser.add_argument("--image_folder", type=str, required=False, default='m3docvqa/images_dev')
     parser.add_argument("--output_file", type=str, required=False, default='demo_results.jsonl')
-    parser.add_argument("--db", type=str, required=False, default='bge_m3_milvus')
+    parser.add_argument("--db", type=str, required=False, default='copali_milvus')
     parser.add_argument("--topk", type=int, required=False, default=5)
     return parser.parse_args()
 
@@ -69,7 +69,7 @@ def use_copali_milvus_db(question_embedding_file: str, topk: int):
     for result in results:
         doc_id = result[1]
         res = milvus_colbert_retriever.client.query(    
-            collection_name="m3docvqa_500",
+            collection_name=COPALI_COLLECTION_NAME,
             filter=f"doc_id == {doc_id}",
             output_fields=["doc"]
         )
@@ -127,7 +127,7 @@ def main():
                     llm_answer = llm_service.complete(
                         system_prompt=IMAGE_RAG_PROMPT,
                         user_prompt=question,
-                        image_paths=related_image_paths,
+                        file_paths=related_image_paths,
                         providers=providers,
                     )
                 elif args.db == "copali_milvus":
@@ -135,8 +135,8 @@ def main():
                     related_image_paths = [os.path.join(image_folder, image_name) for image_name in related_image_names]
                     llm_answer = llm_service.complete(
                         system_prompt=IMAGE_RAG_PROMPT,
-                        user_prompt=question,
-                        image_paths=related_image_paths,
+                        user_prompt=f"Question: {question}",
+                        file_paths=related_image_paths,
                         providers=providers,
                     )
                 elif args.db == "bge_m3_milvus":
