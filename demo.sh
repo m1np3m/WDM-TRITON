@@ -1,1 +1,1 @@
-python demo.py --question_embedding_folder "m3docvqa/question_embeddings" --qa_file "m3docvqa/multimodalqa/MMQA_dev.jsonl" --num_question 1 --image_folder "m3docvqa/images_dev" --db "milvus" --topk 5 --output_file "demo_results.jsonl"
+python demo.py --question_embedding_folder "m3docvqa/question_embeddings" --qa_file "m3docvqa/multimodalqa/MMQA_dev.jsonl" --num_question 1 --image_folder "m3docvqa/images_dev" --db "bge_m3_milvus" --topk 5 --output_file "demo_results.jsonl"
