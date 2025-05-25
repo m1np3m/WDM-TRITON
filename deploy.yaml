@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: docrag-deploy
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: docrag-pod
@@ -33,7 +33,7 @@ metadata:
 spec:
   type: LoadBalancer
   selector:
-    app: docrag-pod
+    app: gemini-pod
   ports:
   - port: 80 # Service IP Port
     targetPort: 80 # Container Port
