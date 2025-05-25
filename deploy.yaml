@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docrag-deploy
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: docrag-pod
+  template:
+    metadata:
+      labels:
+        app: docrag-pod
+    spec:
+      containers:
+      - name: mydocragcontainer
+        image: gcr.io/PROJECT_ID/IMAGE:TAG
+        ports:
+        - containerPort: 80
+        env:
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gemini-secret
+              key: GEMINI_API_KEY
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mylb
+spec:
+  type: LoadBalancer
+  selector:
+    app: gemini-pod
+  ports:
+  - port: 80 # Service IP Port
+    targetPort: 80 # Container Port
