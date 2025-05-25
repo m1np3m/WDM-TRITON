@@ -1,7 +1,9 @@
 import chromadb
 import numpy as np
 import os
+import dotenv
 
+dotenv.load_dotenv()
 client = chromadb.PersistentClient(path=os.getenv("CHROMA_DB_PATH"))
 
 def create_collection(name: str):
