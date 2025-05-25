@@ -10,6 +10,7 @@ env:
   PROJECT_ID: ${{ secrets.GKE_PROJECT }}
   GKE_CLUSTER: doc-rag  # Add your cluster name here.
   GKE_ZONE: us-central1-a  # Add your cluster zone here.
+  GKE_REGION: us-central1
   DEPLOYMENT_NAME: docrag-deploy # Add your deployment name here.
   IMAGE: docrag # Image Name
 
@@ -33,7 +34,7 @@ jobs:
       uses: 'google-github-actions/get-gke-credentials@v2'
       with:
         cluster_name: ${{ env.GKE_CLUSTER }}
-        location: ${{ env.GKE_ZONE }}
+        location: ${{ env.GKE_REGION }}
 
     # Configure Docker to use the gcloud command-line tool as a credential
     # helper for authentication
