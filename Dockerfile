@@ -9,6 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 RUN apt-get update
 RUN apt-get install libmagic1 zip wget -y 
+
 # Install pip requirements
 RUN python -m pip install pip setuptools wheel
 COPY . /app
@@ -19,4 +20,8 @@ ADD ./requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
 # Install opencv dependencies
-CMD ["/bin/bash"]
+# CMD ["/bin/bash"]
+
+EXPOSE 80
+ENTRYPOINT [ "python" ]
+CMD [ "main.py" ]
