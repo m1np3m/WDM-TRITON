@@ -257,17 +257,37 @@ class MilvusBgeM3Retriever:
         dense_weight=1.0,
         topk=5,
     ):
-        dense_search_params = {"metric_type": "IP", "params": {}}
-        dense_req = AnnSearchRequest(
-            [query_dense_embedding], "dense_vector", dense_search_params, limit=topk
-        )
-        sparse_search_params = {"metric_type": "IP", "params": {}}
-        sparse_req = AnnSearchRequest(
-            [query_sparse_embedding], "sparse_vector", sparse_search_params, limit=topk
-        )
-        rerank = WeightedRanker(sparse_weight, dense_weight)
+        dense_search_params = {
+            "data": [query_dense_embedding],
+            "anns_field": "dense_vector",
+            "param": {
+                "metric_type": "IP",
+                "params": {"nprobe": 10}
+                },
+                "limit": topk
+        }
+        dense_req = AnnSearchRequest(**dense_search_params)
+
+        sparse_search_params = {
+            "data": [query_sparse_embedding],
+            "anns_field": "sparse_vector",
+            "param": {
+                "metric_type": "IP",
+                "params": {"drop_ratio_build": 0.2}
+            },
+            "limit": topk
+        }
+        sparse_req = AnnSearchRequest(**sparse_search_params)
+
+        ranker = WeightedRanker(dense_weight, sparse_weight)
+
         res = self.client.hybrid_search(
-            [sparse_req, dense_req], rerank=rerank, limit=topk, output_fields=["text", "doc_id"]
+            collection_name=self.collection_name,
+            reqs=[dense_req, sparse_req],
+            ranker=ranker,
+            output_fields=["text", "doc_id"],
+            limit=topk
         )[0]
+        
         return [{"text": hit.get("text"), "doc_id": hit.get("doc_id")} for hit in res]
 

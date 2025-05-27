@@ -86,10 +86,11 @@ def use_bge_m3_milvus_db(question: str, topk: int):
     sparse_vector = question_embedding["sparse"][0]
     sparse_vector = {c: v for c, v in zip(sparse_vector.col, sparse_vector.data)}
 
-    dense_results = bge_m3_retriever.dense_search(dense_vector, topk)
+    # dense_results = bge_m3_retriever.dense_search(dense_vector, topk)
     # sparse_results = bge_m3_retriever.sparse_search(sparse_vector, topk)
 
-    text_results = [text_result["text"] for text_result in dense_results]
+    hybrid_results = bge_m3_retriever.hybrid_search(dense_vector, sparse_vector, topk=topk)
+    text_results = [text_result["text"] for text_result in hybrid_results]
     return text_results
 
 def main():
@@ -165,14 +166,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
-
-    
-
-
-
-
-
-
-
-
