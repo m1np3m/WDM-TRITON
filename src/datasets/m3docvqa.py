@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -10,7 +11,7 @@ from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from src.models.embedding.bge_m3 import BgeM3MilvusEmbedding
 
-from src.services.processing.text_processing import merge_json_data
+from src.services.processing.text_processing import merge_json_data, processing_dict_data
 
 
 milvus_client = MilvusClient(uri="milvus_db/milvus.db")
@@ -75,18 +76,19 @@ class M3DocVQA(Dataset):
 
         json_paths = os.listdir(self.data_path)
 
-        pdf_paths = self.group_by_prefix(json_paths)
-        for pdf_path in pdf_paths:
-            full_paths = [os.path.join(self.data_path, path) for path in pdf_path]
+        for json_path in json_paths:
+            full_path = os.path.join(self.data_path, json_path)
 
-            full_text = merge_json_data(full_paths)
-            chunked_docs = splitter.split_text(full_text)
+            dict_content = json.load(open(full_path))
+            content = processing_dict_data(dict_content) if isinstance(dict_content, dict) else str(dict_content)
+                
+            chunked_docs = splitter.split_text(content)
 
             for i in range(0, len(chunked_docs), batch_size):
                 batch_data = []
                 batch_docs = chunked_docs[i:i + batch_size]
                 batch_embeddings = bge_m3_embedding.encode([doc for doc in batch_docs])
-                doc_id = pdf_path[0].split("_")[0]
+                doc_id = json_path.split(".")[0]
 
                 sparse_vectors = []
                 for i in range(len(batch_docs)):
@@ -100,7 +102,7 @@ class M3DocVQA(Dataset):
                     "text": batch_docs,
                     "doc_id": [doc_id] * len(batch_docs)
                 }
-                
+                        
                 milvus_bge_m3_retriever.insert(batch_data)
                     
     def add_table_data_to_milvus_db(self, collection_name: str):

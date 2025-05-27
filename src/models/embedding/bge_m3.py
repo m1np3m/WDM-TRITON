@@ -7,6 +7,6 @@ class BgeM3MilvusEmbedding:
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = BGEM3EmbeddingFunction(device=device)
-
+        
     def encode(self, texts: List[str]):
         return self.model(texts)

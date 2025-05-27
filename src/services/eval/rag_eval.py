@@ -18,7 +18,7 @@ class RAGEval:
 
         self.model = MultimodalGeminiModel(
             model_name="gemini-2.5-flash-preview-05-20",
-            api_key=os.getenv("GOOGLE_API_KEY"),
+            api_key=os.getenv("GEMINI_API_KEY"),
             temperature=0
         )
 
@@ -31,6 +31,11 @@ class RAGEval:
 
     def evaluate(self, test_cases: list[Union[MLLMTestCase, LLMTestCase]]):
         results = []
+        answer_relevancy_scores = []
+        faithfulness_scores = []
+        contextual_precision_scores = []
+        contextual_recall_scores = []
+        contextual_relevancy_scores = []
         for test_case in test_cases:
             self.answer_relevancy_metric.measure(test_case)
             self.faithfulness_metric.measure(test_case)
@@ -45,6 +50,19 @@ class RAGEval:
                 "contextual_recall": {"score": self.contextual_recall_metric.score, "reason": self.contextual_recall_metric.reason},
                 "contextual_relevancy": {"score": self.contextual_relevancy_metric.score, "reason": self.contextual_relevancy_metric.reason}
             })
+            answer_relevancy_scores.append(self.answer_relevancy_metric.score)
+            faithfulness_scores.append(self.faithfulness_metric.score)
+            contextual_precision_scores.append(self.contextual_precision_metric.score)
+            contextual_recall_scores.append(self.contextual_recall_metric.score)
+            contextual_relevancy_scores.append(self.contextual_relevancy_metric.score)
+        
+        results.append({
+            "answer_relevancy": sum(answer_relevancy_scores) / len(answer_relevancy_scores),
+            "faithfulness": sum(faithfulness_scores) / len(faithfulness_scores),
+            "contextual_precision": sum(contextual_precision_scores) / len(contextual_precision_scores),
+            "contextual_recall": sum(contextual_recall_scores) / len(contextual_recall_scores),
+            "contextual_relevancy": sum(contextual_relevancy_scores) / len(contextual_relevancy_scores)
+        })
         return results
 
     def evaluate_retrieval(self):
