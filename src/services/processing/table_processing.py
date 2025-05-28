@@ -1,8 +1,12 @@
 import csv
+from datetime import datetime
 import json
 import os
+from typing import Any, Dict, List
 from src.services.llm import LLMService
 from loguru import logger
+import google.generativeai as genai
+
 llm_service = LLMService()
 
 providers = [{"name": "gemini", "model": "gemini-2.5-flash-preview-04-17", "temperature": 0.0, "retry": 3}]
@@ -150,6 +154,520 @@ def table_to_text(data_path: str) -> str:
     if not isinstance(data, dict):
         return ""
     
+class PDFTableIngestor:
+    """
+    Handles loading and parsing PDF table data from JSON files
+    """
+
+    def __init__(self):
+        pass
+
+    def load_tables_from_json(self, json_file_path: str) -> List[Dict]:
+        """
+        Load parsed PDF tables from JSON file
+
+        Args:
+            json_file_path (str): Path to the JSON file containing parsed tables
+
+        Returns:
+            List[Dict]: List of table dictionaries
+        """
+        try:
+            with open(json_file_path, 'r', encoding='utf-8') as f:
+                tables = json.load(f)
+
+            # Validate table structure
+            validated_tables = []
+            for table in tables:
+                if self._validate_table_structure(table):
+                    validated_tables.append(table)
+                else:
+                    print(f"Warning: Invalid table structure for {table.get('table_id', 'unknown')}")
+
+            return validated_tables
+
+        except FileNotFoundError:
+            raise FileNotFoundError(f"JSON file not found: {json_file_path}")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON format: {e}")
+
+    def _validate_table_structure(self, table: Dict) -> bool:
+        """Validate that table has required fields"""
+        required_fields = ['table_id', 'columns', 'rows']
+        return all(field in table for field in required_fields)
+
+    def get_table_stats(self, tables: List[Dict]) -> Dict[str, Any]:
+        """Get statistics about the loaded tables"""
+        if not tables:
+            return {"total_tables": 0}
+
+        stats = {
+            "total_tables": len(tables),
+            "tables_info": []
+        }
+
+        for table in tables:
+            table_info = {
+                "table_id": table.get('table_id', 'unknown'),
+                "columns_count": len(table.get('columns', [])),
+                "rows_count": len(table.get('rows', [])),
+                "page_range": table.get('page_range', []),
+                "has_data": len(table.get('rows', [])) > 0
+            }
+            stats["tables_info"].append(table_info)
+
+        return stats
+
+    def extract_sample_data(self, table: Dict, max_rows: int = 10) -> Dict[str, Any]:
+        """Extract sample data from a table for analysis"""
+        columns = table.get('columns', [])
+        rows = table.get('rows', [])
+
+        sample_rows = rows[:max_rows] if rows else []
+
+        return {
+            "table_id": table.get('table_id', 'unknown'),
+            "columns": columns,
+            "sample_rows": sample_rows,
+            "total_rows": len(rows),
+            "page_range": table.get('page_range', [])
+        }
+     
+class PDFTablePromptConstructor:
+    """
+    Constructs prompts for LLM analysis of PDF tables
+    """
+
+    def __init__(self):
+        self.default_template = """
+            You are a data analysis expert. Analyze the following table extracted from a PDF document and create detailed metadata.
+
+            **Table Information:**
+            - Table ID: {table_id}
+            - Pages: {page_range} (from PDF document)
+            - Document Context: {document_context}
+            - Total Rows: {total_rows}
+            - Columns Count: {columns_count}
+
+            **Table Data:**
+            ```
+            {table_display}
+            ```
+
+            {column_analysis}
+
+            **Requirements:** Create metadata in the following JSON format:
+            ```json
+            {{
+                "table_name": "descriptive_name_for_table",
+                "description": "Brief description of the table's purpose and content",
+                "business_context": "Business context and how this table is typically used",
+                "data_category": "category_type (e.g., 'reference', 'transactional', 'analytical', 'lookup')",
+                "columns": [
+                    {{
+                        "name": "column_name",
+                        "type": "standardized_data_type",
+                        "original_type": "inferred_from_content",
+                        "description": "Detailed description of what this column represents",
+                        "business_meaning": "Business significance of this column",
+                        "data_pattern": "pattern_or_format_description",
+                        "possible_values": "possible_values_if_categorical",
+                        "constraints": "data_constraints_if_any",
+                        "is_key": "primary_key/foreign_key/none"
+                    }}
+                ],
+                "relationships": [
+                    {{
+                        "type": "relationship_type",
+                        "column": "column_name",
+                        "description": "description_of_relationship",
+                        "references": "what_it_might_reference"
+                    }}
+                ],
+                "data_quality_assessment": {{
+                    "completeness": "assessment_of_data_completeness",
+                    "consistency": "assessment_of_data_consistency",
+                    "accuracy": "assessment_of_data_accuracy",
+                    "notes": "additional_quality_notes"
+                }},
+                "usage_recommendations": [
+                    "recommendation_1",
+                    "recommendation_2"
+                ],
+                "semantic_tags": ["tag1", "tag2", "tag3"],
+                "complexity_level": "simple/moderate/complex"
+            }}
+            ```
+
+            **Analysis Guidelines:**
+            - Analyze cell values carefully to understand data types and patterns
+            - Identify potential keys, references, and relationships
+            - Consider the business context based on column names and values
+            - Assess data quality based on visible patterns
+            - Suggest appropriate standardized data types
+            - Only return valid JSON, no additional text
+            """
+
+    def create_table_analysis_prompt(
+        self,
+        sample_data: Dict[str, Any],
+        document_context: str = "",
+        custom_template: str = None
+    ) -> str:
+        """
+        Create analysis prompt for a single table
+
+        Args:
+            sample_data (Dict): Sample data from PDFTableIngestor
+            document_context (str): Additional context about the document
+            custom_template (str): Custom prompt template (optional)
+
+        Returns:
+            str: Formatted prompt for LLM
+        """
+        template = custom_template or self.default_template
+
+        # Format table sample for display
+        table_display = self._format_table_for_display(
+            sample_data['columns'],
+            sample_data['sample_rows']
+        )
+
+        # Create column analysis info
+        column_analysis = self._create_column_analysis_info(
+            sample_data['columns'],
+            sample_data['sample_rows']
+        )
+
+        prompt = template.format(
+            table_id=sample_data['table_id'],
+            page_range=f"{sample_data['page_range'][0]}-{sample_data['page_range'][-1]}" if sample_data['page_range'] else "unknown",
+            document_context=document_context,
+            table_display=table_display,
+            column_analysis=column_analysis,
+            total_rows=sample_data['total_rows'],
+            columns_count=len(sample_data['columns'])
+        )
+
+        return prompt
+
+    def _format_table_for_display(self, columns: List[str], rows: List[List[str]]) -> str:
+        """Format table data for clean display in prompt"""
+        if not columns or not rows:
+            return "Empty table"
+
+        # Create header
+        formatted_table = " | ".join(columns) + "\n"
+        formatted_table += " | ".join(["-" * min(len(col), 20) for col in columns]) + "\n"
+
+        # Add rows
+        for row in rows:
+            # Ensure row has same length as columns
+            padded_row = row + [""] * (len(columns) - len(row))
+            padded_row = padded_row[:len(columns)]  # Truncate if too long
+
+            # Clean cell values (remove newlines, limit length)
+            clean_row = [str(cell).replace('\n', ' ').strip()[:100] for cell in padded_row]
+            formatted_table += " | ".join(clean_row) + "\n"
+
+        return formatted_table
+
+    def _create_column_analysis_info(self, columns: List[str], rows: List[List[str]]) -> str:
+        """Create detailed column analysis information"""
+        if not columns or not rows:
+            return "No data available for analysis"
+
+        analysis = "**Column Analysis:**\n"
+
+        for i, col in enumerate(columns):
+            # Extract column values
+            col_values = []
+            for row in rows:
+                if i < len(row) and row[i]:
+                    col_values.append(str(row[i]).strip())
+
+            # Analyze column characteristics
+            unique_values = list(set(col_values))[:5]  # First 5 unique values
+            has_numbers = any(self._contains_number(val) for val in col_values)
+            has_dates = any(self._contains_date_pattern(val) for val in col_values)
+
+            analysis += f"- **{col}**: "
+            analysis += f"Sample values: {unique_values}, "
+            analysis += f"Contains numbers: {has_numbers}, "
+            analysis += f"Contains dates: {has_dates}\n"
+
+        return analysis
+
+    def _contains_number(self, text: str) -> bool:
+        """Check if text contains numeric values"""
+        import re
+        return bool(re.search(r'\d+', text))
+
+    def _contains_date_pattern(self, text: str) -> bool:
+        """Check if text contains date patterns"""
+        import re
+        date_patterns = [
+            r'\d{4}-\d{2}-\d{2}',  # YYYY-MM-DD
+            r'\d{2}/\d{2}/\d{4}',  # MM/DD/YYYY
+            r'\d{1,2}/\d{1,2}/\d{2,4}',  # M/D/YY or MM/DD/YYYY
+            r'\w+ \d{1,2}, \d{4}'  # Month DD, YYYY
+        ]
+        return any(re.search(pattern, text) for pattern in date_patterns)
+
+
+    def create_batch_analysis_prompt(
+        self,
+        all_sample_data: List[Dict[str, Any]],
+        document_context: str = ""
+    ) -> str:
+
+        """Create a prompt for analyzing multiple tables together"""
+        prompt = f"""
+        You are a data analysis expert. Analyze the following tables extracted from a PDF document and identify relationships between them.
+
+        **Document Context:** {document_context}
+        **Total Tables:** {len(all_sample_data)}
+
+        """
+
+        for i, sample_data in enumerate(all_sample_data, 1):
+            table_display = self._format_table_for_display(
+                sample_data['columns'],
+                sample_data['sample_rows'][:5]  # Limit to 5 rows for batch analysis
+            )
+
+            prompt += f"""
+            **Table {i}: {sample_data['table_id']}**
+            ```
+            {table_display}
+            ```
+
+            """
+
+        prompt += """
+        **Requirements:** Analyze the relationships between these tables and provide:
+        1. Potential foreign key relationships
+        2. Data flow between tables
+        3. Business process representation
+        4. Recommended table usage order
+        5. Data integration opportunities
+
+        Provide analysis in structured text format.
+        """
+
+        return prompt
+
+class PDFTableMetadataGenerator:
+    """
+    Generates metadata for PDF tables using LLM analysis
+    """
+
+    def __init__(self):
+        """
+        Initialize metadata generator
+
+        """
+
+        self.llm_service = LLMService()
+        # self.providers = [{"name": "gemini", "model": "gemini-2.5-flash-preview-04-17", "temperature": 0.0, "retry": 3}]
+        self.providers = [{"name": "gemini", "model": "gemini-2.0-flash", "temperature": 0.0, "retry": 3}]
+        self.ingestor = PDFTableIngestor()
+        self.prompt_constructor = PDFTablePromptConstructor()
+
+    def generate_single_table_metadata(
+        self,
+        sample_data: Dict[str, Any],
+        document_context: str = ""
+    ) -> Dict[str, Any]:
+        """
+        Generate metadata for a single table
+
+        Args:
+            sample_data (Dict): Sample data from PDFTableIngestor
+            document_context (str): Document context
+
+        Returns:
+            Dict: Generated metadata
+        """
+        try:
+            # Create analysis prompt
+            prompt = self.prompt_constructor.create_table_analysis_prompt(
+                sample_data, document_context
+            )
+
+            # Call LLM
+            # response = self.llm_service.complete(
+            #     system_prompt=prompt,
+            #     user_prompt="Let's generate metadata for the table",
+            #     json_output=True,
+            #     providers=self.providers,
+            # )
+
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel(model_name="gemini-2.0-flash")
+            response = model.generate_content(prompt)
+
+            # Parse response
+            metadata = self._parse_llm_response(response.text)
+
+            # metadata = response
+
+            # Add source information
+            metadata['source_info'] = {
+                'table_id': sample_data['table_id'],
+                'page_range': sample_data['page_range'],
+                'total_rows': sample_data['total_rows'],
+                'columns_count': len(sample_data['columns']),
+                'original_columns': sample_data['columns']
+            }
+            metadata['generated_at'] = datetime.now().isoformat()
+
+            return metadata
+
+        except Exception as e:
+            print(f"Error generating metadata for {sample_data['table_id']}: {e}")
+            return self._create_fallback_metadata(sample_data)
+
+    def generate_all_tables_metadata(
+        self,
+        json_file_path: str,
+        document_context: str = ""
+    ) -> Dict[str, Any]:
+        """
+        Generate metadata for all tables in a PDF JSON file
+
+        Args:
+            json_file_path (str): Path to PDF tables JSON file
+            document_context (str): Document context
+
+        Returns:
+            Dict: Complete metadata for all tables
+        """
+        # Load tables
+        tables = self.ingestor.load_tables_from_json(json_file_path)
+        table_stats = self.ingestor.get_table_stats(tables)
+
+        # Initialize result structure
+        all_metadata = {
+            'document_info': {
+                'source_file': json_file_path,
+                'context': document_context,
+                'total_tables': len(tables),
+                'processed_at': datetime.now().isoformat(),
+                'statistics': table_stats
+            },
+            'tables': {}
+        }
+
+        print(f"Processing {len(tables)} tables...")
+
+        # Process each table
+        for table in tables:
+            table_id = table['table_id']
+            print(f"Processing {table_id}...")
+
+            try:
+                # Extract sample data
+                sample_data = self.ingestor.extract_sample_data(table)
+
+                # Generate metadata
+                metadata = self.generate_single_table_metadata(sample_data, document_context)
+                all_metadata['tables'][table_id] = metadata
+
+                print(f"✅ Successfully processed {table_id}")
+
+            except Exception as e:
+                print(f"❌ Error processing {table_id}: {e}")
+                all_metadata['tables'][table_id] = self._create_fallback_metadata(
+                    self.ingestor.extract_sample_data(table)
+                )
+
+        return all_metadata
+
+    def _parse_llm_response(self, response_text: str) -> Dict[str, Any]:
+        """Parse JSON response from LLM"""
+        try:
+            import re
+            json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_str = response_text.strip()
+
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error: {e}")
+            print(f"Response text: {response_text[:500]}...")
+            raise
+
+    def _create_fallback_metadata(self, sample_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create basic metadata when LLM analysis fails"""
+        columns = sample_data['columns']
+
+        column_metadata = []
+        for col in columns:
+            column_metadata.append({
+                'name': col,
+                'type': 'string',
+                'description': f'Column {col} from table {sample_data["table_id"]}',
+                'business_meaning': 'Not analyzed',
+                'data_pattern': 'Unknown'
+            })
+
+        return {
+            'table_name': sample_data['table_id'],
+            'description': 'Auto-generated basic metadata from PDF table',
+            'columns': column_metadata,
+            'source_info': {
+                'table_id': sample_data['table_id'],
+                'total_rows': sample_data['total_rows'],
+                'columns_count': len(columns),
+                'original_columns': columns
+            },
+            'generated_at': datetime.now().isoformat(),
+            'generation_method': 'fallback'
+        }
     
-    
-    
+class TableTextFormatter:
+    def __init__(self, json_path):
+        self.json_path = json_path
+        self.data = self._load_json()
+        self.tables = self.data.get("tables", {})
+
+    def _load_json(self):
+        with open(self.json_path, "r", encoding="utf-8") as file:
+            return json.load(file)
+
+    def format_table(self, table):
+        table_name = table.get("table_name", "Unknown Table")
+        description = table.get("description", "No description available.")
+        columns = table.get("columns", [])
+
+        result = f"Table: {table_name}\n"
+        result += f"Purpose: {description}\n"
+        result += "Columns:\n"
+
+        for col in columns:
+            name = col.get("name", "Unnamed")
+            dtype = col.get("type", "Unknown")
+            desc = col.get("description", "No description.")
+            result += f"- {name} ({dtype}): {desc}\n"
+
+        return result
+
+    def format_all_tables(self):
+        formatted_tables = {}
+        for table_id, table in self.tables.items():
+            formatted_tables[table_id] = self.format_table(table)
+        return formatted_tables
+
+    def save_to_file(self, output_path):
+        os.makedirs(output_path, exist_ok=True)
+        formatted_tables = self.format_all_tables()
+        base_filename = os.path.splitext(os.path.basename(self.json_path))[0]
+
+        for table_id, table_content in formatted_tables.items():
+            save_path = os.path.join(output_path, f"{base_filename}_{table_id}.txt")
+            with open(save_path, "w", encoding="utf-8") as file:
+                file.write(table_content)
+            print(f"Formatted table saved to: {save_path}")
