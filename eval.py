@@ -15,6 +15,7 @@ from src.db.milvus import MilvusBgeM3Retriever
 
 COLLECTION_NAME = "m3docvqa_copali"
 TEXT_COLLECTION_NAME = "m3docvqa_text"
+TABLE_COLLECTION_NAME = "m3docvqa_table"
 
 IMAGE_RAG_PROMPT = """
 You are a helpful assistant that can answer questions about the image.
@@ -44,10 +45,10 @@ def parse_args():
     parser.add_argument("--qa_folder", type=str, required=False, default="m3docvqa/multimodalqa/tables/")
     parser.add_argument("--num_question", type=int, required=False, default=10)
     parser.add_argument("--image_folder", type=str, required=False, default="m3docvqa/images_dev")
-    parser.add_argument("--db", type=str, required=False, default="bge_m3_milvus")
+    parser.add_argument("--db", type=str, required=False, default="bge_m3_table_milvus")
     parser.add_argument("--topk", type=int, required=False, default=5)
     parser.add_argument("--output_file", type=str, required=False, default="eval_results.jsonl")
-    parser.add_argument("--step", type=str, required=False, default="retrieval")
+    parser.add_argument("--step", type=str, required=False, default="rag")
     return parser.parse_args()
 
 def make_qa_test(qa_folder: str, num_question: int):
@@ -125,14 +126,7 @@ def main():
     topk = args.topk
     
     llm_service = LLMService()
-
-    if args.db == "chroma":
-        retriever = chroma_client.get_collection(COLLECTION_NAME)
-    elif args.db == "copali_milvus":
-        retriever = MilvusColbertRetriever(milvus_client, COLLECTION_NAME)
-    elif args.db == "bge_m3_milvus":
-        embedding = BgeM3MilvusEmbedding()
-        retriever = MilvusBgeM3Retriever(milvus_client, TEXT_COLLECTION_NAME)
+    bge_m3_embedding = BgeM3MilvusEmbedding()
 
     image_names = os.listdir(image_folder)
     doc_ids = [image_name.split(".")[0].split("_")[0] for image_name in image_names]
@@ -158,14 +152,22 @@ def main():
         llm_answer = ""
         
         if args.db == "chroma":
+            retriever = chroma_client.get_collection(COLLECTION_NAME)
             related_image_names = use_chroma_db(retriever, question_embedding_file, topk=topk)
-            related_doc_ids = [image_name.split(".")[0] for image_name in related_image_names]
+            related_doc_ids = [[image_name.split(".")[0]] for image_name in related_image_names]
         elif args.db == "copali_milvus":
+            retriever = MilvusColbertRetriever(milvus_client, COLLECTION_NAME)
             related_image_names = use_copali_milvus_db(retriever, question_embedding_file, topk=topk)
-            related_doc_ids = [image_name.split(".")[0] for image_name in related_image_names]
-        elif args.db == "bge_m3_milvus":
-            related_text, related_doc_ids = use_bge_m3_milvus_db(embedding, retriever, question, topk=topk)
-
+            related_doc_ids = [[image_name.split(".")[0]] for image_name in related_image_names]
+        elif args.db == "bge_m3_text_milvus":
+            retriever = MilvusBgeM3Retriever(milvus_client, TEXT_COLLECTION_NAME)
+            related_text, related_doc_ids = use_bge_m3_milvus_db(bge_m3_embedding, retriever, question, topk=topk)
+            related_doc_ids = [[doc_id] for doc_id in related_doc_ids]
+        elif args.db == "bge_m3_table_milvus":
+            retriever = MilvusBgeM3Retriever(milvus_client, TABLE_COLLECTION_NAME)
+            related_text, related_doc_ids = use_bge_m3_milvus_db(bge_m3_embedding, retriever, question, topk=topk)
+            related_doc_ids = [json.loads(doc_id) for doc_id in related_doc_ids]
+            
         related_image_paths = [os.path.join(image_folder, image_name) for image_name in related_image_names]
         
         if args.step == "rag":
@@ -184,7 +186,7 @@ def main():
         retrieval_context.append(related_text + related_image_paths)
         
     if args.step == "rag":
-        eval_service = MultiModalEval(questions, predictions, ground_truths, retrieval_context)
+        eval_service = MultiModalEval(questions, [predictions], ground_truths, retrieval_context)
         test_cases = eval_service.make_test_case()
         results = eval_service.evaluate(test_cases)
     elif args.step == "retrieval":

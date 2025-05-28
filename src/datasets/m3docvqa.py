@@ -91,8 +91,8 @@ class M3DocVQA(Dataset):
                 doc_id = json_path.split(".")[0]
 
                 sparse_vectors = []
-                for i in range(len(batch_docs)):
-                    sparse_vector = batch_embeddings["sparse"][i]
+                for k in range(len(batch_docs)):
+                    sparse_vector = batch_embeddings["sparse"][k]
                     sparse_vector = {c: v for c, v in zip(sparse_vector.col, sparse_vector.data)}
                     sparse_vectors.append(sparse_vector)
 
@@ -105,9 +105,55 @@ class M3DocVQA(Dataset):
                         
                 milvus_bge_m3_retriever.insert(batch_data)
                     
-    def add_table_data_to_milvus_db(self, collection_name: str):
-        pass
+    def add_table_data_to_milvus_db(self, collection_name: str, table_path: str, batch_size: int = 100):
+        milvus_bge_m3_retriever = MilvusBgeM3Retriever(milvus_client, collection_name)
+        bge_m3_embedding = BgeM3MilvusEmbedding()
 
+        tb_description_files = os.listdir(self.data_path)
+
+        for i in range(0, len(tb_description_files), batch_size):
+            batch_data = []
+            batch_files = tb_description_files[i:i + batch_size]
+
+            tb_descriptions = []
+            tb_text = []
+            tb_ids = []
+
+            for tb_description_file in batch_files:
+                with open(os.path.join(self.data_path, tb_description_file), "r") as f:
+                    tb_descriptions.append(f.read())
+                
+                tb_description_name = tb_description_file.replace(".txt", "")
+                pdf_name = tb_description_name.split("_")[0]
+                table_id = "_".join(tb_description_name.split("_")[1:])
+                
+                with open(os.path.join(table_path, pdf_name + ".json"), "rb") as f:
+                    data = json.load(f)
+
+                    for tb_data in data:
+                        if tb_data["table_id"] == table_id:
+                            tb_text.append(str(tb_data))
+                            tb_gt = [pdf_name.split(".")[0] + "_" + str(i) for i in range(tb_data["page_range"][0], tb_data["page_range"][1] + 1)] if len(tb_data["page_range"]) > 1 else [pdf_name.split(".")[0] + "_" + str(tb_data["page_range"][0])]
+                            tb_ids.append(json.dumps(tb_gt))
+                            break
+
+            batch_embeddings = bge_m3_embedding.encode(tb_descriptions)
+
+            sparse_vectors = []
+            for k in range(len(tb_descriptions)):
+                sparse_vector = batch_embeddings["sparse"][k]
+                sparse_vector = {c: v for c, v in zip(sparse_vector.col, sparse_vector.data)}
+                sparse_vectors.append(sparse_vector)
+                
+            batch_data = {
+                "sparse_vector": sparse_vectors,
+                "dense_vector": batch_embeddings["dense"],
+                "text": tb_text,
+                "doc_id": tb_ids
+            }
+
+            milvus_bge_m3_retriever.insert(batch_data)
+            
     @staticmethod
     def group_by_prefix(arr):
         """
