@@ -5,7 +5,6 @@ import os
 from typing import Any, Dict, List
 from src.services.llm import LLMService
 from loguru import logger
-import google.generativeai as genai
 
 llm_service = LLMService()
 
@@ -496,21 +495,19 @@ class PDFTableMetadataGenerator:
             )
 
             # Call LLM
-            # response = self.llm_service.complete(
-            #     system_prompt=prompt,
-            #     user_prompt="Let's generate metadata for the table",
-            #     json_output=True,
-            #     providers=self.providers,
-            # )
+            response = self.llm_service.complete(
+                system_prompt=prompt,
+                user_prompt="Let's generate metadata for the table",
+                json_output=True,
+                providers=self.providers,
+            )
 
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel(model_name="gemini-2.0-flash")
-            response = model.generate_content(prompt)
+            # response = model.generate_content(prompt)
 
-            # Parse response
-            metadata = self._parse_llm_response(response.text)
+            # # Parse response
+            # metadata = self._parse_llm_response(response)
 
-            # metadata = response
+            metadata = response
 
             # Add source information
             metadata['source_info'] = {

@@ -9,7 +9,7 @@ def calculate_precision_at_k(predictions: list[list[str]], ground_truths: list[s
     if not predictions or not ground_truths:
         return 0.0
     
-    true_positives = sum(1 for pred in predictions[:k] if any(_pred in ground_truths[:k] for _pred in pred))
+    true_positives = sum(1 for pred in predictions[:k] if any(_pred in ground_truths for _pred in pred))
 
     return true_positives / len(predictions[:k]) if predictions else 0.0
 
@@ -21,8 +21,10 @@ def calculate_recall_at_k(predictions: list[list[str]], ground_truths: list[str]
     if not predictions or not ground_truths:
         return 0.0
     
-    true_positives = sum(1 for pred in predictions[:k] if any(_pred in ground_truths[:k] for _pred in pred))
-    return true_positives / len(ground_truths[:k]) if ground_truths else 0.0
+    true_positives = sum(1 for pred in predictions if any(_pred in ground_truths for _pred in pred))
+    # return true_positives / len(ground_truths) if ground_truths else 0.0
+
+    return min(true_positives / 1, 1.0) if ground_truths else 0.0
 
 def calculate_f1_at_k(predictions: list[list[str]], ground_truths: list[str], k: int = 1) -> float:
     """
