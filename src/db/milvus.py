@@ -291,3 +291,77 @@ class MilvusBgeM3Retriever:
         
         return [{"text": hit.get("text"), "doc_id": hit.get("doc_id")} for hit in res]
 
+class MilvusLLMRetriever:
+    def __init__(self, milvus_client, collection_name, dim=1024):
+        self.collection_name = collection_name
+        self.client = milvus_client
+        if self.client.has_collection(collection_name=self.collection_name):
+            self.client.load_collection(collection_name)
+        self.dim = dim
+
+    def create_collection(self):
+        if self.client.has_collection(collection_name=self.collection_name):
+            self.client.drop_collection(collection_name=self.collection_name)
+
+        # Specify the data schema for the new Collection
+        fields = [
+            # Use auto generated id as primary key
+            FieldSchema(
+                name="pk", dtype=DataType.VARCHAR, is_primary=True, auto_id=True, max_length=100
+            ),
+            # Store the original text to retrieve based on semantically distance
+            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+            FieldSchema(name="doc_id", dtype=DataType.VARCHAR, max_length=100),
+            FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=self.dim),
+        ]
+        schema = CollectionSchema(fields)
+        self.client.create_collection(
+            collection_name=self.collection_name, schema=schema, consistency_level="Strong"
+        )
+    
+    def create_index(self):
+        # Create an index on the vector field to enable fast similarity search.
+        # Releases and drops any existing index before creating a new one with specified parameters.
+        self.client.release_collection(collection_name=self.collection_name)
+        self.client.drop_index(
+            collection_name=self.collection_name, index_name="vector"
+        )
+
+        index_params = self.client.prepare_index_params()
+
+        
+        index_params.add_index(
+            field_name="vector",
+            index_name="vector_index",
+            index_type="AUTOINDEX",
+            metric_type="IP",
+        )
+
+        self.client.create_index(
+            collection_name=self.collection_name, index_params=index_params, sync=True
+        )
+
+    def insert(self, data):
+        self.client.insert(
+            self.collection_name,
+            [
+                {
+                    "vector": data["vector"][i],
+                    "text": data["text"][i],
+                    "doc_id": data["doc_id"][i],
+                } 
+                for i in range(len(data["doc_id"]))
+            ]
+        )
+    
+    def search(self, query_embedding, topk=5):
+        search_params = {"metric_type": "IP", "params": {}}
+        res = self.client.search(
+            self.collection_name,
+            [query_embedding],
+            anns_field="vector",
+            limit=topk,
+            output_fields=["text", "doc_id"],
+            search_params=search_params,
+        )[0]
+        return [{"text": hit.get("text"), "doc_id": hit.get("doc_id")} for hit in res]
