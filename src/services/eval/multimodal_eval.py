@@ -9,7 +9,8 @@ def calculate_precision_at_k(predictions: list[list[str]], ground_truths: list[s
     if not predictions or not ground_truths:
         return 0.0
     
-    true_positives = sum(1 for pred in predictions[:k] if any(_pred in ground_truths for _pred in pred))
+    # true_positives = sum(1 for pred in predictions[:k] if any(_pred in ground_truths for _pred in pred))
+    true_positives = sum(1 for pred in predictions[:k] if set(pred).issubset(set(ground_truths)) or set(ground_truths).issubset(set(pred)))
 
     return true_positives / len(predictions[:k]) if predictions else 0.0
 
@@ -21,9 +22,10 @@ def calculate_recall_at_k(predictions: list[list[str]], ground_truths: list[str]
     if not predictions or not ground_truths:
         return 0.0
     
-    true_positives = sum(1 for pred in predictions if any(_pred in ground_truths for _pred in pred))
-    # return true_positives / len(ground_truths) if ground_truths else 0.0
+    # true_positives = sum(1 for pred in predictions if any(_pred in ground_truths for _pred in pred))
+    true_positives = sum(1 for pred in predictions if set(pred).issubset(set(ground_truths)) or set(ground_truths).issubset(set(pred)))
 
+    # return true_positives / len(ground_truths) if ground_truths else 0.0
     return min(true_positives / 1, 1.0) if ground_truths else 0.0
 
 def calculate_f1_at_k(predictions: list[list[str]], ground_truths: list[str], k: int = 1) -> float:
@@ -61,13 +63,36 @@ def calculate_ap_at_k(predictions: list[list[str]], ground_truths: list[str], k:
     
     # Calculate AP@K
     for i in range(min(k, len(predictions))):
-        if any(pred in ground_truths for pred in predictions[i]):
+        if set(predictions[i]).issubset(set(ground_truths)) or set(ground_truths).issubset(set(predictions[i])):
             num_relevant += 1
             precision_at_i = num_relevant / (i + 1)
             ap += precision_at_i
     
     # Normalize by the number of relevant items or k, whichever is smaller
     return ap / min(k, len(ground_truths)) if ground_truths else 0.0
+
+def calculate_mrr_at_k(predictions: list[list[str]], ground_truths: list[str], k: int = 1) -> float:
+    """
+    Calculate Mean Reciprocal Rank at K (MRR@K) between predictions and ground truths.
+    MRR@K = 1/rank of first relevant item, where rank is the position of the first relevant item in top K results
+    
+    Args:
+        predictions: List of predicted items, where each item is a list of strings
+        ground_truths: List of ground truth items
+        k: Number of top results to consider
+    
+    Returns:
+        float: MRR@K score (0 if no relevant items found in top K)
+    """
+    if not predictions or not ground_truths:
+        return 0.0
+    
+    # Find the rank of first relevant item
+    for i in range(min(k, len(predictions))):
+        if set(predictions[i]).issubset(set(ground_truths)) or set(ground_truths).issubset(set(predictions[i])):
+            return 1.0 / (i + 1)
+    
+    return 0.0
 
 class MultiModalEval(RAGEval):
     def __init__(self, questions: list[str], predictions: list[list[list[str]]], ground_truths: list[list[str]], retrieval_context: list[list[str]] = None):
@@ -103,6 +128,7 @@ class MultiModalEval(RAGEval):
         recall_scores = []
         f1_scores = []
         ap_scores = []
+        mrr_scores = []
         results = []
         for pred, gt in zip(self.predictions, self.ground_truths):
             pred = list(set(tuple(x) for x in pred))
@@ -112,24 +138,28 @@ class MultiModalEval(RAGEval):
             recall = calculate_recall_at_k(pred, gt, k)
             f1 = calculate_f1_at_k(pred, gt, k)
             ap = calculate_ap_at_k(pred, gt, k)
+            mrr = calculate_mrr_at_k(pred, gt, k)
 
             precision_scores.append(precision)
             recall_scores.append(recall)
             f1_scores.append(f1)
             ap_scores.append(ap)
+            mrr_scores.append(mrr)
             
             results.append({
                 "precision": precision,
                 "recall": recall,
                 "f1_score": f1,
-                "ap_score": ap
+                "ap_score": ap,
+                "mrr_score": mrr
             })
         
         results.append({
             "precision": sum(precision_scores) / len(precision_scores),
             "recall": sum(recall_scores) / len(recall_scores),
             "f1_score": sum(f1_scores) / len(f1_scores),
-            "ap_score": sum(ap_scores) / len(ap_scores)
+            "ap_score": sum(ap_scores) / len(ap_scores),
+            "mrr_score": sum(mrr_scores) / len(mrr_scores)
         })
         
         return results

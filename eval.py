@@ -12,10 +12,16 @@ from src.services.eval import MultiModalEval
 from pymilvus import MilvusClient
 from src.models.embedding.bge_m3 import BgeM3MilvusEmbedding
 from src.db.milvus import MilvusBgeM3Retriever
+import itertools
 
 COLLECTION_NAME = "m3docvqa_copali"
 TEXT_COLLECTION_NAME = "m3docvqa_text"
-TABLE_COLLECTION_NAME = "m3docvqa_table"
+
+TABLE_METADATA_2_STEPS_COLLECTION_NAME = "m3docvqa_table_metadata_description_2steps"
+TABLE_METADATA_E2E_COLLECTION_NAME = "m3docvqa_table_metadata_description_e2e"
+
+TABLE_DESCRIPTION_2_STEPS_COLLECTION_NAME = "m3docvqa_table_description_2steps"
+TABLE_DESCRIPTION_E2E_COLLECTION_NAME = "m3docvqa_table_description_e2e"
 
 IMAGE_RAG_PROMPT = """
 You are a helpful assistant that can answer questions about the image.
@@ -37,18 +43,18 @@ You are an intelligent assistant designed to process and analyze documents provi
 """
 providers = [{"name": "gemini-image", "model": "gemini-2.0-flash", "temperature": 0.9, "retry": 3}]
 
-milvus_client = MilvusClient(uri="milvus_db/milvus.db")
+milvus_client = MilvusClient(uri=os.getenv("MILVUS_DB_PATH"))
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--question_embedding_folder", type=str, required=False, default="m3docvqa/question_embeddings")
     parser.add_argument("--qa_folder", type=str, required=False, default="m3docvqa/multimodalqa/tables/")
-    parser.add_argument("--num_question", type=int, required=False, default=10)
+    parser.add_argument("--num_question", type=int, required=False, default=1000)
     parser.add_argument("--image_folder", type=str, required=False, default="m3docvqa/images_dev")
     parser.add_argument("--db", type=str, required=False, default="bge_m3_table_milvus")
     parser.add_argument("--topk", type=int, required=False, default=5)
     parser.add_argument("--output_file", type=str, required=False, default="eval_results.jsonl")
-    parser.add_argument("--step", type=str, required=False, default="rag")
+    parser.add_argument("--step", type=str, required=False, default="retrieval")
     return parser.parse_args()
 
 def make_qa_test(qa_folder: str, num_question: int):
@@ -108,11 +114,13 @@ def use_bge_m3_milvus_db(embedding, retriever, question: str, topk: int):
     sparse_vector = question_embedding["sparse"][0]
     sparse_vector = {c: v for c, v in zip(sparse_vector.col, sparse_vector.data)}
 
-    # dense_results = bge_m3_retriever.dense_search(dense_vector, topk)
-    # sparse_results = bge_m3_retriever.sparse_search(sparse_vector, topk)
+    # dense_results = retriever.dense_search(dense_vector, topk)
+    # text_results = [result["text"] for result in dense_results]
+    # doc_ids = [result["doc_id"] for result in dense_results]
+
+    # sparse_results = retriever.sparse_search(sparse_vector, topk)
 
     hybrid_results = retriever.hybrid_search(dense_vector, sparse_vector, topk=topk)
-
     text_results = [result["text"] for result in hybrid_results]
     doc_ids = [result["doc_id"] for result in hybrid_results]
 
@@ -154,19 +162,24 @@ def main():
         if args.db == "chroma":
             retriever = chroma_client.get_collection(COLLECTION_NAME)
             related_image_names = use_chroma_db(retriever, question_embedding_file, topk=topk)
-            related_doc_ids = [[image_name.split(".")[0]] for image_name in related_image_names]
+            # related_doc_ids = [[image_name.split(".")[0]] for image_name in related_image_names]
+            related_doc_ids = [[image_name.split(".")[0] for image_name in related_image_names]]
         elif args.db == "copali_milvus":
             retriever = MilvusColbertRetriever(milvus_client, COLLECTION_NAME)
+            # topk = len(retrieval_gt)
             related_image_names = use_copali_milvus_db(retriever, question_embedding_file, topk=topk)
-            related_doc_ids = [[image_name.split(".")[0]] for image_name in related_image_names]
+            # related_doc_ids = [[image_name.split(".")[0]] for image_name in related_image_names]
+            related_doc_ids = [[image_name.split(".")[0] for image_name in related_image_names]]
         elif args.db == "bge_m3_text_milvus":
             retriever = MilvusBgeM3Retriever(milvus_client, TEXT_COLLECTION_NAME)
             related_text, related_doc_ids = use_bge_m3_milvus_db(bge_m3_embedding, retriever, question, topk=topk)
-            related_doc_ids = [[doc_id] for doc_id in related_doc_ids]
+            # related_doc_ids = [[doc_id] for doc_id in related_doc_ids]
+            related_doc_ids = [[doc_id for doc_id in related_doc_ids]]
         elif args.db == "bge_m3_table_milvus":
-            retriever = MilvusBgeM3Retriever(milvus_client, TABLE_COLLECTION_NAME)
+            retriever = MilvusBgeM3Retriever(milvus_client, TABLE_METADATA_E2E_COLLECTION_NAME)
             related_text, related_doc_ids = use_bge_m3_milvus_db(bge_m3_embedding, retriever, question, topk=topk)
             related_doc_ids = [json.loads(doc_id) for doc_id in related_doc_ids]
+            # related_doc_ids = [[id for ids in related_doc_ids for id in ids]]
             
         related_image_paths = [os.path.join(image_folder, image_name) for image_name in related_image_names]
         

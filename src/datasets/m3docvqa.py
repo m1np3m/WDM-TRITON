@@ -13,8 +13,6 @@ from src.models.embedding.llm import LLMEmbedding
 from src.services.processing.text_processing import merge_json_data, processing_dict_data
 import time
 
-milvus_client = MilvusClient(uri="milvus_db/milvus.db")
-
 class M3DocVQA(Dataset):
     def __init__(self, data_path: str, embedding_path: str=None):
         super().__init__(data_path, embedding_path)
@@ -22,9 +20,9 @@ class M3DocVQA(Dataset):
     def load_data(self):
         self.data = []
 
-    def add_copali_data_to_chroma_db(self, collection_name: str, batch_size: int = 100):
+    def add_copali_data_to_chroma_db(self, client, collection_name: str, batch_size: int = 100):
         image_files = glob.glob(os.path.join(self.data_path, "*"))
-        chrome_retriever = ChromaRetriever(collection_name)
+        chrome_retriever = ChromaRetriever(client, collection_name)
         # Process files in batches
         for i in range(0, len(image_files), batch_size):
             batch_files = image_files[i:i + batch_size]
@@ -49,8 +47,8 @@ class M3DocVQA(Dataset):
     def get_data(self):
         return self.data
 
-    def add_copali_data_to_milvus_db(self, collection_name: str, batch_size: int = 1):
-        milvus_colbert_retriever = MilvusColbertRetriever(milvus_client, collection_name)
+    def add_copali_data_to_milvus_db(self, client, collection_name: str, batch_size: int = 1):
+        milvus_colbert_retriever = MilvusColbertRetriever(client, collection_name)
         image_files = glob.glob(os.path.join(self.data_path, "*"))
 
         for i, image_file in enumerate(image_files):
@@ -68,11 +66,11 @@ class M3DocVQA(Dataset):
 
             milvus_colbert_retriever.insert(data)
     
-    def add_text_data_to_milvus_db(self, collection_name: str, batch_size: int = 100, embedding_type: str = "bge_m3"):
+    def add_text_data_to_milvus_db(self, client, collection_name: str, batch_size: int = 100, embedding_type: str = "bge_m3"):
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         json_paths = os.listdir(self.data_path)
         if embedding_type == "bge_m3":
-            milvus_bge_m3_retriever = MilvusBgeM3Retriever(milvus_client, collection_name)
+            milvus_bge_m3_retriever = MilvusBgeM3Retriever(client, collection_name)
             bge_m3_embedding = BgeM3MilvusEmbedding()
 
             for json_path in json_paths:
@@ -107,7 +105,7 @@ class M3DocVQA(Dataset):
         elif embedding_type == "llm":
             time.sleep(120)
             llm_embedding = LLMEmbedding(model_name="models/gemini-embedding-exp-03-07")
-            milvus_llm_retriever = MilvusLLMRetriever(milvus_client, collection_name)
+            milvus_llm_retriever = MilvusLLMRetriever(client, collection_name)
             
             for json_path in json_paths:
                 full_path = os.path.join(self.data_path, json_path)
@@ -131,10 +129,10 @@ class M3DocVQA(Dataset):
                             
                     milvus_llm_retriever.insert(batch_data)
 
-    def add_table_data_to_milvus_db(self, collection_name: str, table_path: str, batch_size: int = 100, embedding_type: str = "bge_m3"):
+    def add_table_metadata_to_milvus_db(self, client, collection_name: str, table_path: str, batch_size: int = 100, embedding_type: str = "bge_m3"):
         tb_description_files = os.listdir(self.data_path)
         if embedding_type == "bge_m3":
-            milvus_bge_m3_retriever = MilvusBgeM3Retriever(milvus_client, collection_name)
+            milvus_bge_m3_retriever = MilvusBgeM3Retriever(client, collection_name)
             bge_m3_embedding = BgeM3MilvusEmbedding()
 
             for i in range(0, len(tb_description_files), batch_size):
@@ -181,7 +179,7 @@ class M3DocVQA(Dataset):
                 milvus_bge_m3_retriever.insert(batch_data)
 
         elif embedding_type == "llm":
-            milvus_llm_retriever = MilvusLLMRetriever(milvus_client, collection_name)
+            milvus_llm_retriever = MilvusLLMRetriever(client, collection_name)
             llm_embedding = LLMEmbedding()
 
             for i in range(0, len(tb_description_files), batch_size):
@@ -219,7 +217,86 @@ class M3DocVQA(Dataset):
                 }
 
                 milvus_llm_retriever.insert(batch_data)
-            
+    
+    def add_table_description_to_milvus_db(self, client, collection_name: str, batch_size: int = 1, embedding_type: str = "bge_m3"):
+        tb_description_files = os.listdir(self.data_path)
+        if embedding_type == "bge_m3":
+            milvus_bge_m3_retriever = MilvusBgeM3Retriever(client, collection_name)
+            bge_m3_embedding = BgeM3MilvusEmbedding()
+
+            for i in range(0, len(tb_description_files), batch_size):
+                batch_data = []
+                batch_files = tb_description_files[i:i + batch_size]
+
+                tb_descriptions = []
+                tb_text = []
+                tb_ids = []
+
+                for tb_description_file in batch_files:
+                    with open(os.path.join(self.data_path, tb_description_file), "rb") as f:
+                        data = json.load(f)
+
+                        pdf_name = tb_description_file.split(".")[0]
+                        for tb_data in data:
+                            for tb_row in tb_data["rows"]:
+                                tb_descriptions.append(tb_row)
+                                tb_text.append(str(tb_row))
+                                tb_gt = [pdf_name + "_" + str(i) for i in range(tb_data["page_range"][0], tb_data["page_range"][1] + 1)] if len(tb_data["page_range"]) > 1 else [pdf_name + "_" + str(tb_data["page_range"][0])]
+                                tb_ids.append(json.dumps(tb_gt))
+                                break
+
+                batch_embeddings = bge_m3_embedding.encode(tb_descriptions)
+
+                sparse_vectors = []
+                for k in range(len(tb_descriptions)):
+                    sparse_vector = batch_embeddings["sparse"][k]
+                    sparse_vector = {c: v for c, v in zip(sparse_vector.col, sparse_vector.data)}
+                    sparse_vectors.append(sparse_vector)
+                    
+                batch_data = {
+                    "sparse_vector": sparse_vectors,
+                    "dense_vector": batch_embeddings["dense"],
+                    "text": tb_text,
+                    "doc_id": tb_ids
+                }
+
+                milvus_bge_m3_retriever.insert(batch_data)
+
+        elif embedding_type == "llm":
+            milvus_llm_retriever = MilvusLLMRetriever(client, collection_name)
+            llm_embedding = LLMEmbedding()
+
+            for i in range(0, len(tb_description_files), batch_size):
+                batch_data = []
+                batch_files = tb_description_files[i:i + batch_size]
+
+                tb_descriptions = []
+                tb_text = []
+                tb_ids = []
+
+                for tb_description_file in batch_files:
+                    with open(os.path.join(self.data_path, tb_description_file), "rb") as f:
+                        data = json.load(f)
+
+                        pdf_name = tb_description_file.split(".")[0]
+                        for tb_data in data:
+                            for tb_row in tb_data["rows"]:
+                                tb_descriptions.append(tb_row)
+                                tb_text.append(str(tb_row))
+                                tb_gt = [pdf_name + "_" + str(i) for i in range(tb_data["page_range"][0], tb_data["page_range"][1] + 1)] if len(tb_data["page_range"]) > 1 else [pdf_name + "_" + str(tb_data["page_range"][0])]
+                                tb_ids.append(json.dumps(tb_gt))
+                                break
+
+                batch_embeddings = llm_embedding.embed_batch_text(tb_descriptions)
+                    
+                batch_data = {
+                    "vector": batch_embeddings,
+                    "text": tb_text,
+                    "doc_id": tb_ids
+                }
+
+                milvus_llm_retriever.insert(batch_data)
+
     @staticmethod
     def group_by_prefix(arr):
         """

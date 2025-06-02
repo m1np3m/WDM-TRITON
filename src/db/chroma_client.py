@@ -4,17 +4,16 @@ import os
 import dotenv
 
 dotenv.load_dotenv()
-client = chromadb.PersistentClient(path=os.getenv("CHROMA_DB_PATH"))
 
 class ChromaRetriever:
-    def __init__(self, collection_name: str):
+    def __init__(self, client, collection_name: str):
         self.collection_name = collection_name
-
-        if client.get_collection(collection_name):
-            client.delete_collection(collection_name)
+        self.client = client
+        if self.client.get_collection(collection_name):
+            self.client.delete_collection(collection_name)
 
     def create_collection(self):
-        self.collection = client.get_or_create_collection(self.collection_name)
+        self.collection = self.client.get_or_create_collection(self.collection_name)
         
     def add_image_embeddings(self, batch_data: list):
         ids = [data["id"] for data in batch_data]
@@ -34,4 +33,4 @@ class ChromaRetriever:
         )
 
     def delete_collection(self):
-        return client.delete_collection(self.collection_name)
+        return self.client.delete_collection(self.collection_name)

@@ -2,10 +2,10 @@ from src.services.llm import LLMService
 import json
 import os
 
-class LLMParser:
-    def __init__(self, image_paths: list[str]):
+class LLMTextParser:
+    def __init__(self, data_path: str):
         self.llm_service = LLMService()
-        self.image_paths = image_paths
+        self.data_path = data_path
 
         self.providers = [{"name": "gemini-image", "model": "gemini-2.5-flash-preview-04-17", "temperature": 0.9, "retry": 3}]
 
@@ -44,12 +44,13 @@ class LLMParser:
         """
 
     def parse(self, output_path: str) -> str:
-        for image_path in self.image_paths:
+        for file in os.listdir(self.data_path):
+            image_path = os.path.join(self.data_path, file)
             for attempt in range(3):
                 parsing_results = self.llm_service.complete(
                                 system_prompt=self.SYSTEM_PARSING_PROMPT,
                                 user_prompt="Please parse the content of this document image in detail",
-                                image_paths=[image_path],
+                                file_paths=[image_path],
                                 json_output=True,
                                 providers=self.providers,
                                 )
