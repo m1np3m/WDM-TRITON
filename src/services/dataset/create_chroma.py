@@ -7,4 +7,4 @@ m3docvqa = M3DocVQA(image_path="m3docvqa/images_dev", embedding_path="m3docvqa/e
 
 chroma_client.delete_collection(CHROMA_COLLECTION_NAME)
 chroma_client.create_collection(CHROMA_COLLECTION_NAME)
-m3docvqa.add_data_to_chroma_db(CHROMA_COLLECTION_NAME, batch_size=100)
+m3docvqa.add_copali_data_to_chroma_db(CHROMA_COLLECTION_NAME, batch_size=100)

@@ -17,3 +17,6 @@ Requests==2.32.3
 scipy==1.15.3
 torch==2.7.0
 transformers==4.51.3
+langchain-openai==0.3.18
+langchain-google-genai==2.1.5
+pymilvus[model]

@@ -164,7 +164,7 @@ class MilvusBgeM3Retriever:
             ),
             # Store the original text to retrieve based on semantically distance
             FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-            FieldSchema(name="doc_id", dtype=DataType.VARCHAR, max_length=100),
+            FieldSchema(name="doc_id", dtype=DataType.VARCHAR, max_length=1000),
             # Milvus now supports both sparse and dense vectors,
             # we can store each in a separate field to conduct hybrid search on both vectors
             FieldSchema(name="sparse_vector", dtype=DataType.SPARSE_FLOAT_VECTOR),
@@ -311,7 +311,7 @@ class MilvusLLMRetriever:
             ),
             # Store the original text to retrieve based on semantically distance
             FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-            FieldSchema(name="doc_id", dtype=DataType.VARCHAR, max_length=100),
+            FieldSchema(name="doc_id", dtype=DataType.VARCHAR, max_length=1000),
             FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=self.dim),
         ]
         schema = CollectionSchema(fields)

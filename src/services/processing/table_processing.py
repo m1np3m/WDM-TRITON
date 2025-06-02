@@ -1,10 +1,13 @@
 import csv
 from datetime import datetime
+import glob
 import json
 import os
 from typing import Any, Dict, List
 from src.services.llm import LLMService
 from loguru import logger
+from google import genai
+from google.genai.types import GenerateContentConfig
 
 llm_service = LLMService()
 
@@ -152,7 +155,120 @@ def table_to_text(data_path: str) -> str:
 
     if not isinstance(data, dict):
         return ""
+
+class TableRowDescription:
+    def __init__(self, data_path: str):
+        self.data_path = data_path
+        self.llm_service = LLMService()
+        self.providers = [{"name": "gemini", "model": "gemini-2.5-flash-preview-04-17", "temperature": 0.0, "retry": 3}]
+        
+        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        self.model = "gemini-2.5-flash-preview-04-17"
+
+        self.DESCRIPTION_SYSTEM_PROMPT = """
+            ### ROLE
+                - You are a document analysis tool.
+
+            ### INSTRUCTIONS
+                - You will receive a list of tables in JSON format with the following structure:
+                    [
+                        {
+                            "table_id": "Table_1",
+                            "columns": [],
+                            "page_range": [39, 39],
+                            "rows": [
+                                [
+                                    "Music",
+                                    "John Williams \u2022 \"I Hate Myself for Loving You\" \u2022 Joan Jett \u2022 \"Somethin' Bad\" \u2022 Miranda Lambert (Faith Hill \u2022 Pink \u2022 Carrie Underwood)"
+                                ],
+                                [
+                                    "NFL Championship",
+                                    "1955 \u2022 1956 \u2022 1957 \u2022 1958 \u2022 1959 \u2022 1960 \u2022 1961 \u2022 1962 \u2022 1963"
+                                ],
+                                [
+                                    "AFL Championship",
+                                    "1965 \u2022 1966 \u2022 1967 \u2022 1968 \u2022 1969"
+                                ],
+                                [
+                                    "Pre-AFL-NFL merger",
+                                    "I (1966) \u2022 III (1968)"
+                                ],
+                                [
+                                    "AFC package carrier\n(1970\u20131997)",
+                                    "V (1970) \u2022 VII (1972) \u2022 IX (1974) \u2022 XI (1976) \u2022 XIII (1978) \u2022 XV (1980) \u2022 XVII (1982) \u2022 XX (1985) \u2022 XXIII (1988) \u2022 XXVII (1992) \u2022 XXVIII (1993) \u2022 XXX (1995) \u2022 XXXII (1997)"
+                                ],
+                                [
+                                    "Sunday Night Football era\n(2006\u2013present)",
+                                    "XLIII (2008) \u2022 XLVI (2011) \u2022 XLIX (2014) \u2022 LII (2017) \u2022 LVI (2021) \u2022 LX (2025) \u2022 LXIV (2029)"
+                                ],
+                                [
+                                    "Halftime shows",
+                                    "V (1970) \u2022 XX (1985) \u2022 XXIII (1988) \u2022 XXVII (1992) \u2022 XXX (1995) \u2022 XLVI (2011) \u2022 XLIX (2014) \u2022 LII (2017) \u2022 LVI (2021)"
+                                ],
+                                [
+                                    "Pro Bowl",
+                                    "1952 \u2022 1953 \u2022 1958 \u2022 1959 \u2022 1960 \u2022 1961 \u2022 1962 \u2022 1963 \u2022 1964 \u2022 1965 \u2022 1972 \u2022 1974 \u2022 2009 \u2022 2012 \u2022 2013 \u2022 2014"
+                                ],
+                                [
+                                    "NFL Honors",
+                                    "2012 \u2022 2015 \u2022 2018 \u2022 2023"
+                                ]
+                            ]
+                        },
+                    ]
+                
+                - Your task is for each row of a table, you give a unique description, no need to list additional numbers.
+                - The description sentence must be natural and semantically complete so that the embedding models can capture it.	
+
+            ### OUTPUT
+                [
+                    {
+                        "table_id": "Table_1",
+                        "columns": [],
+                        "page_range": [39, 39],
+                        "rows": [
+                            "Description of Row 1",
+                            "Description of Row 2",
+                            "Description of Row 3"
+                        ]
+                    }
+                ]
+        """
+
+    def get_rows_description(self, table_data: list[dict]) -> str:
+        for attempt in range(3):
+            table_description = self.client.models.generate_content(
+                model=self.model,
+                config=GenerateContentConfig(
+                    response_mime_type="application/json",
+                    system_instruction=self.DESCRIPTION_SYSTEM_PROMPT,
+                ),
+                contents=f"Please describe the following table: {table_data}"
+            )
+
+            table_description = table_description.text
+            try:
+                table_description = json.loads(table_description)
+                break
+            except Exception as e:
+                print(f"Retry parsing table description {attempt + 1}")
+                if attempt == 2:
+                    print(f"Failed to parse table description: {e}")
+                    return None
+                continue
+
+        return table_description
     
+    def process_tables(self, output_path: str):
+        table_names = os.listdir(self.data_path)
+        for table_name in table_names:
+            table_path = os.path.join(self.data_path, table_name)
+            with open(table_path, "r") as f:
+                table_data = json.load(f)
+            table_description = self.get_rows_description(table_data)
+            with open(f"{output_path}/{table_name.split('.')[0]}.json", "w") as f:
+                json.dump(table_description, f)
+
 class PDFTableIngestor:
     """
     Handles loading and parsing PDF table data from JSON files
@@ -468,10 +584,11 @@ class PDFTableMetadataGenerator:
         """
 
         self.llm_service = LLMService()
-        # self.providers = [{"name": "gemini", "model": "gemini-2.5-flash-preview-04-17", "temperature": 0.0, "retry": 3}]
-        self.providers = [{"name": "gemini", "model": "gemini-2.0-flash", "temperature": 0.0, "retry": 3}]
+        self.providers = [{"name": "gemini", "model": "gemini-2.5-flash-preview-04-17", "temperature": 0.0, "retry": 3}]
+        # self.providers = [{"name": "gemini", "model": "gemini-2.0-flash", "temperature": 0.0, "retry": 3}]
         self.ingestor = PDFTableIngestor()
         self.prompt_constructor = PDFTablePromptConstructor()
+        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     def generate_single_table_metadata(
         self,
@@ -494,20 +611,34 @@ class PDFTableMetadataGenerator:
                 sample_data, document_context
             )
 
-            # Call LLM
-            response = self.llm_service.complete(
-                system_prompt=prompt,
-                user_prompt="Let's generate metadata for the table",
-                json_output=True,
-                providers=self.providers,
-            )
-
-            # response = model.generate_content(prompt)
+            # # Call LLM
+            # response = self.llm_service.complete(
+            #     system_prompt=prompt,
+            #     user_prompt="Let's generate metadata for the table",
+            #     json_output=True,
+            #     providers=self.providers,
+            # )
+            for attempt in range(5):
+                response = self.client.models.generate_content(
+                    contents=[prompt],
+                    model="gemini-2.5-flash-preview-04-17",
+                    config=GenerateContentConfig(response_mime_type="application/json")
+                )
+                
+                try:
+                    metadata = json.loads(response.text)
+                except json.JSONDecodeError as jde:
+                    print(f"JSON decode error: {jde}")
+                    if attempt == 4:
+                        print(f"Failed to generate metadata for {sample_data['table_id']} after {attempt + 1} attempts")
+                        metadata = None
+                    continue
+                break
 
             # # Parse response
             # metadata = self._parse_llm_response(response)
 
-            metadata = response
+            # metadata = response
 
             # Add source information
             metadata['source_info'] = {
