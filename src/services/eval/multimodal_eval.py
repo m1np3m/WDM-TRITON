@@ -1,4 +1,3 @@
-from deepeval.test_case import MLLMTestCase, MLLMImage
 from src.services.eval.rag_eval import RAGEval
 
 def calculate_precision_at_k(predictions: list[list[str]], ground_truths: list[str], k: int = 1) -> float:
@@ -98,30 +97,18 @@ class MultiModalEval(RAGEval):
     def __init__(self, questions: list[str], predictions: list[list[list[str]]], ground_truths: list[list[str]], retrieval_context: list[list[str]] = None):
         super().__init__(questions, predictions, ground_truths, retrieval_context)
     
-    def make_test_case(self) -> list[MLLMTestCase]:
+    def make_test_case(self) -> list:
         test_cases = []
         for question, prediction, ground_truth, retrieval_context in zip(self.questions, self.predictions[0], self.ground_truths, self.retrieval_context):
-            test_case = MLLMTestCase(
-                input=[question],
-                actual_output=[
-                    MLLMImage(url=pred) if (pred.endswith('.png') or pred.endswith('.jpg')) else pred
-                    for pred in prediction
-                ],
-                expected_output=[
-                    MLLMImage(url=gt) if (gt.endswith('.png') or gt.endswith('.jpg')) else gt
-                    for gt in ground_truth
-                ],
-                retrieval_context=[
-                    MLLMImage(url=context) if (str(context).endswith('.png') or str(context).endswith('.jpg')) else context
-                    for context in retrieval_context
-                ],
-                context=[
-                    MLLMImage(url=context) if (str(context).endswith('.png') or str(context).endswith('.jpg')) else context
-                    for context in retrieval_context
-                ]
-            )
+            test_case = {
+                "user_input": question,
+                "retrieved_contexts": [context for context in retrieval_context],
+                "response": prediction[0],
+                "reference": ground_truth[0]
+            }
             test_cases.append(test_case)
-        return test_cases        
+
+        return test_cases
 
     def evaluate_retrieval(self, k: int = 1):
         precision_scores = []
