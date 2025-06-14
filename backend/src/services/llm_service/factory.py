@@ -1,6 +1,6 @@
 from typing import Dict, Type
-from .implementations.base import LLMService
-from .implementations.gemini import GeminiService
+from .base import LLMService
+from .implementations import GeminiService
 
 class LLMServiceFactory:
     """Factory for creating LLM service instances.

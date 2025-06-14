@@ -13,8 +13,8 @@ from google.genai.types import (
     GenerateContentConfig
 )
 
-from .base import LLMService
-from src.config import Config
+from ..base import LLMService
+from ....config import Config
 
 
 class GeminiService(LLMService):
