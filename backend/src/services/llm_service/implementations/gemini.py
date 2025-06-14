@@ -1,5 +1,6 @@
 import time
 import json
+import os
 from pathlib import Path
 from loguru import logger
 from typing import Any, Dict, List, Union, Optional
@@ -12,10 +13,10 @@ from google.genai.types import (
     GenerateContentConfig
 )
 
-from .base import BaseLLM
+from .base import LLMService
 
 
-class GeminiLLM(BaseLLM):
+class GeminiService(LLMService):
     """Google Gemini LLM wrapper with support for text, image, and file generation."""
     
     # Class-level constants
@@ -26,6 +27,7 @@ class GeminiLLM(BaseLLM):
     DEFAULT_TOP_P = 0.95
     DEFAULT_TOP_K = 40
     FILE_UPLOAD_DELAY = 1  # seconds
+    ENV_API_KEY = "GEMINI_API_KEY"  # Tên biến môi trường cho API key
     
     _SAFETY_SETTINGS = [
         SafetySetting(
@@ -51,11 +53,14 @@ class GeminiLLM(BaseLLM):
         
         Args:
             model: Model name to use
-            api_key: Google API key
+            api_key: Google API key. If not provided, will try to load from environment variable
         """
         super().__init__()
         self._model = model
-        self._api_key = api_key
+        self._api_key = api_key or os.getenv(self.ENV_API_KEY)
+        
+        if not self._api_key:
+            raise ValueError(f"API key not provided and {self.ENV_API_KEY} environment variable not set")
     
     def _connect(self) -> None:
         """Establish connection to Google Gemini API."""
