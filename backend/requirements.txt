@@ -1,3 +1,5 @@
+pytest
 loguru
+python-dotenv
 google-genai
 google-generativeai

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-class BaseLLM(ABC):
+class LLMService(ABC):
     """Abstract base class for LLM services."""
     def __init__(self):
         self._model = None
@@ -21,18 +21,10 @@ class BaseLLM(ABC):
     
     def ensure_connection(self) -> None:
         """Ensure connection, reconnect if not connected."""
-        if not self.is_connected():
+        if not self._is_connected:
             self._connect()
             self._is_connected = True
     
     @abstractmethod
     def generate(self) -> None:
-        pass
-    
-    @abstractmethod
-    def generate_with_image(self) -> None:
-        pass
-    
-    @abstractmethod
-    def generate_with_file(self) -> None:
         pass
