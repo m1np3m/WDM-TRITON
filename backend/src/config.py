@@ -1,7 +1,6 @@
 import os
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 class Config:
@@ -10,7 +9,7 @@ class Config:
     MILVUS_PORT = os.getenv('MILVUS_PORT', 19530)
     
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev')
-    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
     DEBUG = True 
     
     DIMENSIONS = 768
