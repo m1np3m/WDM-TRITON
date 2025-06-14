@@ -1,6 +1,26 @@
-pytest
-loguru
-pymilvus
-python-dotenv
-google-genai
-google-generativeai
+# Core ML/AI dependencies
+torch>=2.0.0
+transformers>=4.30.0
+tokenizers>=0.13.3
+accelerate>=0.20.0
+
+# Document processing
+docling-core>=1.0.0
+
+# Image processing
+Pillow>=9.0.0
+
+# Vector database
+pymilvus>=2.3.0
+
+# Google AI/Generative AI
+google-generativeai>=0.3.0
+
+# Environment and configuration
+python-dotenv>=1.0.0
+
+# Logging
+loguru>=0.7.0
+
+# Testing
+pytest>=7.0.0
