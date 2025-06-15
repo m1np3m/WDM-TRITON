@@ -10,6 +10,7 @@ class Config:
     
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev')
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     DEBUG = True 
     
     DIMENSIONS = 768
