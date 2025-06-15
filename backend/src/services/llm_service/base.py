@@ -14,11 +14,6 @@ class LLMService(ABC):
         """Set up LLM connection."""
         pass
     
-    @abstractmethod
-    def _connect(self) -> None:
-        """Set up LLM connection."""
-        pass
-    
     def ensure_connection(self) -> None:
         """Ensure connection, reconnect if not connected."""
         if not self._is_connected:

@@ -1,26 +1,33 @@
-# Core ML/AI dependencies
+# === Core ML/AI Dependencies ===
+numpy==1.24.3
 torch>=2.0.0
 transformers>=4.30.0
 tokenizers>=0.13.3
 accelerate>=0.20.0
+onnxruntime==1.15.1
 
-# Document processing
-docling-core>=1.0.0
-
-# Image processing
-Pillow>=9.0.0
-
-# Vector database
-pymilvus>=2.3.0
-
-# Google AI/Generative AI
+# === LLM Frameworks & Embedding APIs ===
+langchain>=0.1.0
+langchain-openai>=0.1.0
+langchain-google-genai>=0.0.5
+openai>=1.0.0
 google-generativeai>=0.3.0
 
-# Environment and configuration
+# === Document & Text Processing ===
+docling-core>=1.0.0
+
+# === Image Processing ===
+Pillow>=9.0.0
+
+# === Vector Database ===
+pymilvus==2.3.0
+pymilvus[model]
+
+# === Configuration & Environment ===
 python-dotenv>=1.0.0
 
-# Logging
+# === Logging ===
 loguru>=0.7.0
 
-# Testing
+# === Testing ===
 pytest>=7.0.0
