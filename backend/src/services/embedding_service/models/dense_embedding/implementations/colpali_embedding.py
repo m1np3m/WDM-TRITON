@@ -4,10 +4,10 @@ from typing import Any, List, Optional, Union
 import torch
 from transformers import ColPaliForRetrieval, ColPaliProcessor
 
-from ..base import SemanticEmbeddingService
+from ..base import DenseEmbeddingService
 
 
-class ColPaliEmbeddingService(SemanticEmbeddingService):
+class ColPaliEmbeddingService(DenseEmbeddingService):
     """
     Embedding service using the ColPali model for both text and image inputs.
     """

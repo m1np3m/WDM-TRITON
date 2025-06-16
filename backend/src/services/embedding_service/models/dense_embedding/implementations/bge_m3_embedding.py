@@ -3,11 +3,11 @@ from typing import List, Optional
 import torch
 from pymilvus.model.hybrid import BGEM3EmbeddingFunction
 
-from ..base import SemanticEmbeddingService
+from ..base import DenseEmbeddingService
 from ......config import Config
 
 
-class BGEM3EmbeddingService(SemanticEmbeddingService):
+class BGEM3EmbeddingService(DenseEmbeddingService):
     """
     Service for generating text embeddings using the BGE-M3 model from pymilvus.
     """

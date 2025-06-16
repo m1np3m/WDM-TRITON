@@ -5,6 +5,7 @@ transformers>=4.30.0
 tokenizers>=0.13.3
 accelerate>=0.20.0
 onnxruntime==1.15.1
+marshmallow>=3.13.0
 
 # === LLM Frameworks & Embedding APIs ===
 langchain>=0.1.0
@@ -22,7 +23,7 @@ Pillow>=9.0.0
 
 # === Vector Database ===
 pymilvus==2.3.0
-pymilvus[model]
+pymilvus[model]==2.3.0
 
 # === Configuration & Environment ===
 python-dotenv>=1.0.0

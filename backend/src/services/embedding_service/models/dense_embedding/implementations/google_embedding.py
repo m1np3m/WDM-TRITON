@@ -2,11 +2,11 @@ from typing import List, Optional
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-from ..base import SemanticEmbeddingService
+from ..base import DenseEmbeddingService
 from ......config import Config
 
 
-class GoogleEmbeddingService(SemanticEmbeddingService):
+class GoogleEmbeddingService(DenseEmbeddingService):
     """
     Embedding service that uses Google's Generative AI via LangChain.
     """
