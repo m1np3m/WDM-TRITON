@@ -2,11 +2,11 @@ from typing import List, Optional
 
 from langchain_openai import OpenAIEmbeddings
 
-from ..base import SemanticEmbeddingService
+from ..base import DenseEmbeddingService
 from ......config import Config
 
 
-class OpenAIEmbeddingService(SemanticEmbeddingService):
+class OpenAIEmbeddingService(DenseEmbeddingService):
     """
     Embedding service that uses OpenAI models via LangChain's OpenAIEmbeddings.
     """

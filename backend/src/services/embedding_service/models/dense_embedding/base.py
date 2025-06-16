@@ -4,9 +4,9 @@ from typing import Any, List, Optional, Union
 
 from ..base import EmbeddingService
 
-class SemanticEmbeddingService(EmbeddingService, ABC):
+class DenseEmbeddingService(EmbeddingService, ABC):
     """
-    Abstract base class for semantic embedding services.
+    Abstract base class for dense embedding services.
     """
 
     @abstractmethod
@@ -41,4 +41,4 @@ class SemanticEmbeddingService(EmbeddingService, ABC):
     def supports_image_embedding(self) -> bool:
         """Check if the service supports image embeddings."""
         # Considered supported only if `get_image_embedding` is overridden
-        return self.__class__.get_image_embedding is not SemanticEmbeddingService.get_image_embedding
+        return self.__class__.get_image_embedding is not DenseEmbeddingService.get_image_embedding
