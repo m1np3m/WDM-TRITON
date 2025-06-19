@@ -7,9 +7,9 @@ from pymilvus import (
     CollectionSchema, 
     DataType
 )
-from src.config import Config
 from typing import List, Dict, Any, Optional
-from .base import BaseDatabase
+from ...config import Config
+from ..base import BaseDatabase
 
 logger = logging.getLogger(__name__)
 
